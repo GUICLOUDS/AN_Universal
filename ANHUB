@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local CREATOR_ID = 1494561843
-local CO_FOUNDER_ID = 11084026865
+local CO_FOUNDER_ID = 0
 
 local function IsAdmin(userId)
     return userId == CREATOR_ID or userId == CO_FOUNDER_ID
