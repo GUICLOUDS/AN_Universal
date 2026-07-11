@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local CREATOR_ID = 1494561843
-local CO_FOUNDER_ID = 0
+local CO_FOUNDER_ID = 11084026865
 
 local function IsAdmin(userId)
     return userId == CREATOR_ID or userId == CO_FOUNDER_ID
@@ -2042,7 +2042,15 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
 end)
 
 local ActiveTags = {}
-local ActiveScriptUsers = {}
+
+pcall(function()
+    LocalPlayer:SetAttribute("AN_ActiveUser", true)
+    if LocalPlayer.Character then LocalPlayer.Character:SetAttribute("AN_ActiveUser", true) end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    pcall(function() char:SetAttribute("AN_ActiveUser", true) end)
+end)
 
 local function cleanTag(player)
     if ActiveTags[player] then
@@ -2113,76 +2121,26 @@ local function applyOverheadTag(player)
     end
 end
 
-local function BroadcastPresence()
-    local hiddenCode = "/e AN_USER_CONNECTED"
-    local TextChatService = game:GetService("TextChatService")
-    
-    pcall(function()
-        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-            TextChatService.TextChannels.RBXGeneral:SendAsync(hiddenCode)
-        else
-            game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(hiddenCode, "All")
-        end
-    end)
-end
-
 local function managePlayer(player)
-    -- Listen to their chat messages to detect script execution
-    player.Chatted:Connect(function(msg)
-        if msg == "/e AN_USER_CONNECTED" then
-            ActiveScriptUsers[player.UserId] = true
-            if Settings.ShowTags then
-                applyOverheadTag(player)
-            end
-        end
-    end)
-
     player.CharacterAdded:Connect(function()
         task.wait(1)
-        if ActiveScriptUsers[player.UserId] or IsAdmin(player.UserId) then 
-            if Settings.ShowTags then applyOverheadTag(player) end 
-        end
+        if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
     end)
-
-    if ActiveScriptUsers[player.UserId] or IsAdmin(player.UserId) then 
-        if Settings.ShowTags then applyOverheadTag(player) end 
-    end
+    player:GetAttributeChangedSignal("AN_ActiveUser"):Connect(function()
+        if player:GetAttribute("AN_ActiveUser") then applyOverheadTag(player) else cleanTag(player) end
+    end)
+    if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
 end
 
-Players.PlayerAdded:Connect(function(player)
-    managePlayer(player)
-    -- Broadcast our presence to the new player after they load
-    task.delay(3, function()
-        BroadcastPresence()
-    end)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    cleanTag(player)
-    ActiveScriptUsers[player.UserId] = nil
-end)
-
-for _, p in ipairs(Players:GetPlayers()) do 
-    if p ~= LocalPlayer then managePlayer(p) end 
-end
+Players.PlayerAdded:Connect(managePlayer)
+Players.PlayerRemoving:Connect(cleanTag)
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then managePlayer(p) end end
 if IsAdmin(LocalPlayer.UserId) then managePlayer(LocalPlayer) end
-
--- Periodic Ping System
-task.spawn(function()
-    while task.wait(35) do
-        BroadcastPresence()
-    end
-end)
-
--- Initial broadcast
-task.delay(2, function()
-    BroadcastPresence()
-end)
 
 updateOverheadVisibility = function()
     if Settings.ShowTags then
         for _, p in ipairs(Players:GetPlayers()) do
-            if ActiveScriptUsers[p.UserId] or IsAdmin(p.UserId) then applyOverheadTag(p) end
+            if p:GetAttribute("AN_ActiveUser") or IsAdmin(p.UserId) then applyOverheadTag(p) end
         end
     else
         for p, _ in pairs(ActiveTags) do cleanTag(p) end
