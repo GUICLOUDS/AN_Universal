@@ -880,23 +880,10 @@ MetaRow.Font = FONTS.Medium
 MetaRow.TextXAlignment = Enum.TextXAlignment.Left
 MetaRow.Parent = InfoPanel
 
-local DetailDescription = Instance.new("TextLabel")
-DetailDescription.Name = "DetailDescription"
-DetailDescription.Size = UDim2.new(1, 0, 1, -162)
-DetailDescription.Position = UDim2.new(0, 0, 0, 68)
-DetailDescription.BackgroundTransparency = 1
-DetailDescription.TextColor3 = COLORS.GreyLight
-DetailDescription.TextSize = 13
-DetailDescription.Font = FONTS.Book
-DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
-DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
-DetailDescription.TextWrapped = true
-DetailDescription.Parent = InfoPanel
-
 local TagsDetailScroll = Instance.new("ScrollingFrame")
 TagsDetailScroll.Name = "TagsDetailScroll"
 TagsDetailScroll.Size = UDim2.new(1, 0, 0, 30)
-TagsDetailScroll.Position = UDim2.new(0, 0, 1, -90)
+TagsDetailScroll.Position = UDim2.new(0, 0, 0, 60)
 TagsDetailScroll.BackgroundTransparency = 1
 TagsDetailScroll.ScrollBarThickness = 0
 TagsDetailScroll.Parent = InfoPanel
@@ -906,6 +893,19 @@ DetailTagsLayout.FillDirection = Enum.FillDirection.Horizontal
 DetailTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 DetailTagsLayout.Padding = UDim.new(0, 8)
 DetailTagsLayout.Parent = TagsDetailScroll
+
+local DetailDescription = Instance.new("TextLabel")
+DetailDescription.Name = "DetailDescription"
+DetailDescription.Size = UDim2.new(1, 0, 1, -150)
+DetailDescription.Position = UDim2.new(0, 0, 0, 95)
+DetailDescription.BackgroundTransparency = 1
+DetailDescription.TextColor3 = COLORS.GreyLight
+DetailDescription.TextSize = 13
+DetailDescription.Font = FONTS.Book
+DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
+DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
+DetailDescription.TextWrapped = true
+DetailDescription.Parent = InfoPanel
 
 local ButtonRow = Instance.new("Frame")
 ButtonRow.Name = "ButtonRow"
@@ -1206,21 +1206,91 @@ FBSubmitBtn.Parent = FeedbackRow
 createCorner(FBSubmitBtn, 4)
 BindInteractionSounds(FBSubmitBtn)
 
+local maxReports = 3
+local currentReports = 0
+local isReportLocked = false
+local cooldownDuration = 300
+local spamLockFile = "AN/NFX_SpamLock.txt"
+
+pcall(function()
+    if isfile and readfile and isfile(spamLockFile) then
+        local savedTime = tonumber(readfile(spamLockFile))
+        if savedTime and (os.time() - savedTime) < cooldownDuration then
+            isReportLocked = true
+            FBInput.Text = "SEND FEATURE LOCKED DUE TO SPAM. PLEASE WAIT 5 MINS."
+            FBInput.TextEditable = false
+            FBSubmitBtn.Text = "Locked"
+            FBSubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 20, 20)
+        end
+    end
+end)
+
 FBSubmitBtn.MouseButton1Click:Connect(function()
+    if isReportLocked then return end
+    
     local text = FBInput.Text
     if text == "" then return end
+    
+    currentReports = currentReports + 1
+    local isSpamTrigger = false
+    
+    if currentReports >= maxReports then
+        isReportLocked = true
+        isSpamTrigger = true
+        
+        pcall(function()
+            if writefile then writefile(spamLockFile, tostring(os.time())) end
+        end)
+        
+        FBInput.Text = "SEND FEATURE LOCKED DUE TO SPAM. PLEASE WAIT 5 MINS."
+        FBInput.TextEditable = false
+        FBSubmitBtn.Text = "Locked"
+        FBSubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 20, 20)
+    end
+
     task.spawn(function()
         local req = request or http_request or (syn and syn.request)
         if not req then 
             FBSubmitBtn.Text = "Unsupported"
             task.wait(2)
-            FBSubmitBtn.Text = "Submit"
+            FBSubmitBtn.Text = isReportLocked and "Locked" or "Submit"
             return 
         end
         
-        local url = "https://discord.com/api/webhooks/1525456253331964004/SY6JCjkvak3s1c1nTn4pDq89VamfjXXcEWqZtHNjSli9ilAJULWQKpGoMJDgJoQN8-Fk" 
+        local url = "https://discord.com/api/webhooks/1525456253331964004/SY6JCjkvak3s1c1nTn4pDq89VamfjXXcEWqZtHNjSli9ilAJULWQKpGoMJDgJoQN8-Fk"
+        
+        local embedTitle = "🚨 New Report Received!"
+        local embedDesc = "**User:** `" .. LocalPlayer.Name .. "`\n**Message:**\n```\n" .. text .. "\n```"
+        local embedColor = tonumber("0xE50914")
+        
+        if isSpamTrigger then
+            embedTitle = "🛑 SPAM PREVENTED"
+            embedDesc = "**User:** `" .. LocalPlayer.Name .. "` hit the rate limit.\nThey are now locked out for 5 minutes across all sessions.\n**Final Message:**\n```\n" .. text .. "\n```"
+            embedColor = tonumber("0xFF0000")
+        end
+        
         local payload = {
-            content = "📣 **New Report from " .. LocalPlayer.Name .. "**\n```\n" .. text .. "\n```"
+            content = "<@975571423919759410>", 
+            embeds = {
+                {
+                    title = embedTitle,
+                    description = embedDesc,
+                    color = embedColor,
+                    fields = {
+                        {
+                            name = "📱 Mobile User ID Copy",
+                            value = "` " .. tostring(LocalPlayer.UserId) .. " `",
+                            inline = true
+                        },
+                        {
+                            name = "💻 PC User ID Copy",
+                            value = "```lua\n" .. tostring(LocalPlayer.UserId) .. "\n```",
+                            inline = false
+                        }
+                    },
+                    footer = { text = "AN Universal Auto-Report System" }
+                }
+            }
         }
         
         local success, res = pcall(function()
@@ -1232,14 +1302,16 @@ FBSubmitBtn.MouseButton1Click:Connect(function()
             })
         end)
         
-        if success then
+        if success and not isSpamTrigger then
             FBInput.Text = ""
             FBSubmitBtn.Text = "Sent!"
             FBSubmitBtn.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
             task.wait(2)
-            FBSubmitBtn.Text = "Submit"
-            FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
-        else
+            if not isReportLocked then
+                FBSubmitBtn.Text = "Submit"
+                FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
+            end
+        elseif not success and not isSpamTrigger then
             FBSubmitBtn.Text = "Error"
             task.wait(2)
             FBSubmitBtn.Text = "Submit"
@@ -1280,7 +1352,7 @@ end)
 local ServerHopBtn = makeActionBtn(TeleportActions, "Serverhop")
 ServerHopBtn.MouseButton1Click:Connect(function()
     local req = request or http_request or (syn and syn.request)
-    if not req then warn("HTTP Request not supported.") return end
+    if not req then return end
     local res = req({Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"})
     if res and res.StatusCode == 200 then
         local data = HttpService:JSONDecode(res.Body)
