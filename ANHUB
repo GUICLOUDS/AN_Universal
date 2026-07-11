@@ -52,7 +52,7 @@ local MOVIES = {}
 local TagCounts = {}
 local UniqueTags = {}
 local LastMoviesData = nil
-local updateCarousel -- Forward declaration
+local updateCarousel
 
 local function FetchMovies()
     pcall(function()
@@ -304,7 +304,6 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- ### NETFLIX AUTO UPDATE NOTIFICATION SYSTEM ###
 local function ShowNetflixNotification(title, desc)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 320, 0, 70)
@@ -368,7 +367,6 @@ local function ShowNetflixNotification(title, desc)
     end)
 end
 
--- Background Github Polling
 task.spawn(function()
     while task.wait(60) do 
         if FetchMovies() then
@@ -1202,7 +1200,6 @@ CreditsDescription.Font = FONTS.Medium
 CreditsDescription.TextSize = 13
 CreditsDescription.Parent = CreditsContent
 
--- ### ADMIN PANEL ###
 local AdminFrame
 local AdminCodeInput
 if IsAdmin(LocalPlayer.UserId) then
@@ -1267,7 +1264,6 @@ if IsAdmin(LocalPlayer.UserId) then
     end)
 end
 
--- ### COMMAND LISTENER (All Users) ###
 local function HandleAdminCommand(speaker, message)
     if not IsAdmin(speaker.UserId) then return end
     
@@ -1298,13 +1294,76 @@ local function HandleAdminCommand(speaker, message)
     end
 end
 
-for _, p in ipairs(Players:GetPlayers()) do
-    p.Chatted:Connect(function(msg) HandleAdminCommand(p, msg) end)
+local HANDSHAKE_SECRET = "[AN_SYSTEM_HANDSHAKE_ACTIVATE]"
+
+local function flagActiveUser(player)
+    if player and player:IsA("Player") then
+        pcall(function()
+            player:SetAttribute("AN_ActiveUser", true)
+        end)
+    end
 end
-Players.PlayerAdded:Connect(function(p)
-    p.Chatted:Connect(function(msg) HandleAdminCommand(p, msg) end)
+
+local function sendSilentHandshake(targetPlayer)
+    if targetPlayer == LocalPlayer then return end
+    pcall(function()
+        local TextChatService = game:GetService("TextChatService")
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            local channelName = "RBXWhisper:" .. LocalPlayer.UserId .. ":" .. targetPlayer.UserId
+            local alternateChannel = "RBXWhisper:" .. targetPlayer.UserId .. ":" .. LocalPlayer.UserId
+            local whisperChannel = TextChatService.TextChannels:FindFirstChild(channelName) or TextChatService.TextChannels:FindFirstChild(alternateChannel)
+            if whisperChannel then
+                whisperChannel:SendAsync(HANDSHAKE_SECRET)
+            end
+        else
+            local chatEvents = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+            local sayMsg = chatEvents and chatEvents:FindFirstChild("SayMessageRequest")
+            if sayMsg then
+                sayMsg:FireServer("/w " .. targetPlayer.Name .. " " .. HANDSHAKE_SECRET, "All")
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    task.wait(3)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            sendSilentHandshake(p)
+        end
+    end
 end)
 
+local function monitorHandshakes(speaker, message)
+    local cleanMsg = message:gsub("^/w%s+%S+%s+", ""):gsub("^%s*", "")
+    if cleanMsg == HANDSHAKE_SECRET or message == HANDSHAKE_SECRET then
+        flagActiveUser(speaker)
+        if speaker ~= LocalPlayer and not speaker:GetAttribute("AN_ActiveUser") then
+            sendSilentHandshake(speaker)
+        end
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    p.Chatted:Connect(function(msg) 
+        HandleAdminCommand(p, msg) 
+        if msg:find(HANDSHAKE_SECRET) then
+            monitorHandshakes(p, msg)
+        end
+    end)
+end
+
+Players.PlayerAdded:Connect(function(p)
+    p.Chatted:Connect(function(msg) 
+        HandleAdminCommand(p, msg) 
+        if msg:find(HANDSHAKE_SECRET) then
+            monitorHandshakes(p, msg)
+        end
+    end)
+    task.delay(2, function()
+        sendSilentHandshake(p)
+    end)
+end)
 
 local SettingsFrame = Instance.new("Frame")
 SettingsFrame.Name = "SettingsFrame"
@@ -2102,7 +2161,6 @@ local function applyOverheadTag(player)
     elseif player.UserId == CO_FOUNDER_ID then
         role = "AN Co-Founder"
         
-        -- The Moving Yellow/Black Gradient for Co-Founder
         local gradient = Instance.new("UIGradient")
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
@@ -2160,9 +2218,8 @@ RunService.Heartbeat:Connect(function()
                     data.TextLabel.TextColor3 = lerpedColor
                     data.Stroke.Color = lerpedColor
                 elseif data.UserId == CO_FOUNDER_ID and data.Gradient then
-                    -- Moving the gradient dynamically for Co-Founder
                     data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0)
-                    data.Stroke.Color = Color3.fromRGB(255, 215, 0) -- Yellow Border
+                    data.Stroke.Color = Color3.fromRGB(255, 215, 0)
                 else
                     local formula = (math.sin(clock * 3) + 1) / 2
                     local neonBase = Color3.fromRGB(0, 220, 255)
