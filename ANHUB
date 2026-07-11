@@ -26,27 +26,17 @@ local SOUND_URLS = {
 }
 
 local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json"
-local CLOUD_BLACKLIST_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/blacklist.json"
+local CLOUD_BLACKLIST_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/blacklist.jsom"
 
-local BlacklistData = {}
-local isUserBlacklisted = false
-local unbanTimestamp = 0
-local isPermaban = false
+local BlacklistedIDs = { 12345678, 87654321 }
+local isUserBlacklisted = table.find(BlacklistedIDs, LocalPlayer.UserId) ~= nil
 
--- Updated Blacklist Parser
 pcall(function()
     local res = game:HttpGet(CLOUD_BLACKLIST_URL)
     local decoded = HttpService:JSONDecode(res)
     if decoded and type(decoded) == "table" then
-        local userIdStr = tostring(LocalPlayer.UserId)
-        if decoded[userIdStr] then
-            unbanTimestamp = tonumber(decoded[userIdStr])
-            if unbanTimestamp == -1 then
-                isUserBlacklisted = true
-                isPermaban = true
-            elseif unbanTimestamp > os.time() then
-                isUserBlacklisted = true
-            end
+        if table.find(decoded, LocalPlayer.UserId) then
+            isUserBlacklisted = true
         end
     end
 end)
@@ -890,10 +880,23 @@ MetaRow.Font = FONTS.Medium
 MetaRow.TextXAlignment = Enum.TextXAlignment.Left
 MetaRow.Parent = InfoPanel
 
+local DetailDescription = Instance.new("TextLabel")
+DetailDescription.Name = "DetailDescription"
+DetailDescription.Size = UDim2.new(1, 0, 1, -162)
+DetailDescription.Position = UDim2.new(0, 0, 0, 68)
+DetailDescription.BackgroundTransparency = 1
+DetailDescription.TextColor3 = COLORS.GreyLight
+DetailDescription.TextSize = 13
+DetailDescription.Font = FONTS.Book
+DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
+DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
+DetailDescription.TextWrapped = true
+DetailDescription.Parent = InfoPanel
+
 local TagsDetailScroll = Instance.new("ScrollingFrame")
 TagsDetailScroll.Name = "TagsDetailScroll"
 TagsDetailScroll.Size = UDim2.new(1, 0, 0, 30)
-TagsDetailScroll.Position = UDim2.new(0, 0, 0, 65)
+TagsDetailScroll.Position = UDim2.new(0, 0, 1, -90)
 TagsDetailScroll.BackgroundTransparency = 1
 TagsDetailScroll.ScrollBarThickness = 0
 TagsDetailScroll.Parent = InfoPanel
@@ -903,19 +906,6 @@ DetailTagsLayout.FillDirection = Enum.FillDirection.Horizontal
 DetailTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 DetailTagsLayout.Padding = UDim.new(0, 8)
 DetailTagsLayout.Parent = TagsDetailScroll
-
-local DetailDescription = Instance.new("TextLabel")
-DetailDescription.Name = "DetailDescription"
-DetailDescription.Size = UDim2.new(1, 0, 1, -162)
-DetailDescription.Position = UDim2.new(0, 0, 0, 105)
-DetailDescription.BackgroundTransparency = 1
-DetailDescription.TextColor3 = COLORS.GreyLight
-DetailDescription.TextSize = 13
-DetailDescription.Font = FONTS.Book
-DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
-DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
-DetailDescription.TextWrapped = true
-DetailDescription.Parent = InfoPanel
 
 local ButtonRow = Instance.new("Frame")
 ButtonRow.Name = "ButtonRow"
@@ -1216,25 +1206,9 @@ FBSubmitBtn.Parent = FeedbackRow
 createCorner(FBSubmitBtn, 4)
 BindInteractionSounds(FBSubmitBtn)
 
--- Updated Spam Detection System
-local feedbackCooldown = 0
-local spamAttempts = 0
-local isFeedbackLocked = false
-
 FBSubmitBtn.MouseButton1Click:Connect(function()
-    if isFeedbackLocked then return end
-    
     local text = FBInput.Text
     if text == "" then return end
-
-    local currentTime = tick()
-    if currentTime - feedbackCooldown < 5 then 
-        spamAttempts = spamAttempts + 1
-    else
-        spamAttempts = 1 
-    end
-    feedbackCooldown = currentTime
-
     task.spawn(function()
         local req = request or http_request or (syn and syn.request)
         if not req then 
@@ -1245,25 +1219,7 @@ FBSubmitBtn.MouseButton1Click:Connect(function()
         end
         
         local url = "https://discord.com/api/webhooks/1525456253331964004/SY6JCjkvak3s1c1nTn4pDq89VamfjXXcEWqZtHNjSli9ilAJULWQKpGoMJDgJoQN8-Fk" 
-        local payload
-        
-        -- If user clicks submit more than 4 times quickly
-        if spamAttempts >= 4 then
-            isFeedbackLocked = true
-            FBSubmitBtn.Text = "Locked"
-            FBSubmitBtn.BackgroundColor3 = Color3.fromRGB(198, 40, 40)
-            
-            payload = {
-                content = "🚨 **SPAM PREVENTED** 🚨\nNotification for @noli_0\n**User:** " .. LocalPlayer.Name .. "\n\n**Mobile ID Copy:** `" .. LocalPlayer.UserId .. "`\n**PC ID Copy:**\n```lua\n" .. LocalPlayer.UserId .. "\n```\nThis user attempted to spam the feedback form and has been locked out. The webhook will not send any more messages from them until they rejoin the game."
-            }
-            
-            pcall(function()
-                req({Url = url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(payload)})
-            end)
-            return
-        end
-
-        payload = {
+        local payload = {
             content = "📣 **New Report from " .. LocalPlayer.Name .. "**\n```\n" .. text .. "\n```"
         }
         
@@ -1281,14 +1237,12 @@ FBSubmitBtn.MouseButton1Click:Connect(function()
             FBSubmitBtn.Text = "Sent!"
             FBSubmitBtn.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
             task.wait(2)
-            if not isFeedbackLocked then
-                FBSubmitBtn.Text = "Submit"
-                FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
-            end
+            FBSubmitBtn.Text = "Submit"
+            FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
         else
             FBSubmitBtn.Text = "Error"
             task.wait(2)
-            if not isFeedbackLocked then FBSubmitBtn.Text = "Submit" end
+            FBSubmitBtn.Text = "Submit"
         end
     end)
 end)
@@ -1916,7 +1870,6 @@ playIntroAnimation()
 if isUserBlacklisted then
     MenuFrame:Destroy()
     HeaderBar:Destroy()
-    
     local SuspendText = Instance.new("TextLabel")
     SuspendText.Size = UDim2.new(1, 0, 1, -60)
     SuspendText.BackgroundTransparency = 1
@@ -1926,26 +1879,11 @@ if isUserBlacklisted then
     SuspendText.TextColor3 = COLORS.BrandRed
     SuspendText.Parent = MainFrame
 
-    -- Updated UI text to show calculated time remaining or permanent ban status
-    local remainingTimeStr = "Duration: Permanent"
-    
-    if not isPermaban and unbanTimestamp > 0 then
-        local diff = unbanTimestamp - os.time()
-        if diff > 0 then
-            local days = math.floor(diff / 86400)
-            local hours = math.floor((diff % 86400) / 3600)
-            local mins = math.floor((diff % 3600) / 60)
-            remainingTimeStr = string.format("Unban in: %d Days, %d Hours, %d Mins", days, hours, mins)
-        else
-            remainingTimeStr = "Ban Expired. Please rejoin to refresh."
-        end
-    end
-
     local SubText = Instance.new("TextLabel")
     SubText.Size = UDim2.new(1, 0, 0, 40)
     SubText.Position = UDim2.new(0, 0, 0.5, 30)
     SubText.BackgroundTransparency = 1
-    SubText.Text = "Your access to AN Universal has been revoked.\n" .. remainingTimeStr .. "\n\nClosing window in 3 seconds..."
+    SubText.Text = "Your access to AN Universal has been revoked.\nError Code: 403 - Forbidden\n\nClosing window in 3 seconds..."
     SubText.Font = FONTS.Medium
     SubText.TextSize = 14
     SubText.TextColor3 = COLORS.GreyLight
