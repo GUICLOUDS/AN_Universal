@@ -9,6 +9,13 @@ local TextService = game:GetService("TextService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+local CREATOR_ID = 1494561843
+local CO_FOUNDER_ID = 1783783103409
+
+local function IsAdmin(userId)
+    return userId == CREATOR_ID or userId == CO_FOUNDER_ID
+end
+
 pcall(function()
     if makefolder and isfolder and not isfolder("AN") then
         makefolder("AN")
@@ -44,41 +51,58 @@ end)
 local MOVIES = {}
 local TagCounts = {}
 local UniqueTags = {}
+local LastMoviesData = nil
+local updateCarousel -- Forward declaration
 
-pcall(function()
-    local res = game:HttpGet(CLOUD_MOVIES_URL)
-    local decoded = HttpService:JSONDecode(res)
-    if decoded and type(decoded) == "table" and #decoded > 0 then
-        MOVIES = decoded
-        for _, movie in ipairs(MOVIES) do
-            local parsedTags = {}
-            if movie.Tags then
-                if type(movie.Tags) == "string" then
-                    for t in string.gmatch(movie.Tags, "([^,]+)") do
-                        local trimmed = t:match("^%s*(.-)%s*$")
-                        if trimmed ~= "" then table.insert(parsedTags, trimmed) end
+local function FetchMovies()
+    pcall(function()
+        local res = game:HttpGet(CLOUD_MOVIES_URL)
+        if res ~= LastMoviesData then
+            local isUpdate = LastMoviesData ~= nil
+            LastMoviesData = res
+            local decoded = HttpService:JSONDecode(res)
+            if decoded and type(decoded) == "table" and #decoded > 0 then
+                MOVIES = decoded
+                TagCounts = {}
+                UniqueTags = {}
+                for _, movie in ipairs(MOVIES) do
+                    local parsedTags = {}
+                    if movie.Tags then
+                        if type(movie.Tags) == "string" then
+                            for t in string.gmatch(movie.Tags, "([^,]+)") do
+                                local trimmed = t:match("^%s*(.-)%s*$")
+                                if trimmed ~= "" then table.insert(parsedTags, trimmed) end
+                            end
+                        elseif type(movie.Tags) == "table" then
+                            for _, t in ipairs(movie.Tags) do
+                                local trimmed = tostring(t):match("^%s*(.-)%s*$")
+                                if trimmed ~= "" then table.insert(parsedTags, trimmed) end
+                            end
+                        end
                     end
-                elseif type(movie.Tags) == "table" then
-                    for _, t in ipairs(movie.Tags) do
-                        local trimmed = tostring(t):match("^%s*(.-)%s*$")
-                        if trimmed ~= "" then table.insert(parsedTags, trimmed) end
+                    
+                    movie.ParsedTags = parsedTags
+                    
+                    for _, t in ipairs(parsedTags) do
+                        if not TagCounts[t] then
+                            TagCounts[t] = 0
+                            table.insert(UniqueTags, t)
+                        end
+                        TagCounts[t] = TagCounts[t] + 1
                     end
                 end
-            end
-            
-            movie.ParsedTags = parsedTags
-            
-            for _, t in ipairs(parsedTags) do
-                if not TagCounts[t] then
-                    TagCounts[t] = 0
-                    table.insert(UniqueTags, t)
+                table.sort(UniqueTags)
+                
+                if isUpdate and updateCarousel then
+                    updateCarousel()
                 end
-                TagCounts[t] = TagCounts[t] + 1
+                return isUpdate
             end
         end
-        table.sort(UniqueTags)
-    end
-end)
+    end)
+    return false
+end
+FetchMovies()
 
 local FAVORITES_FILE = "AN/NFX_MyList.json"
 local Favorites = {}
@@ -280,6 +304,79 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+-- ### NETFLIX AUTO UPDATE NOTIFICATION SYSTEM ###
+local function ShowNetflixNotification(title, desc)
+    local NotifFrame = Instance.new("Frame")
+    NotifFrame.Size = UDim2.new(0, 320, 0, 70)
+    NotifFrame.Position = UDim2.new(1, 10, 1, -90)
+    NotifFrame.AnchorPoint = Vector2.new(1, 1)
+    NotifFrame.BackgroundColor3 = COLORS.DarkBack
+    NotifFrame.BorderSizePixel = 0
+    NotifFrame.ZIndex = 200
+    NotifFrame.Parent = ScreenGui
+    createCorner(NotifFrame, 6)
+    createStroke(NotifFrame, COLORS.BrandRed, 2)
+
+    local NIcon = Instance.new("TextLabel")
+    NIcon.Size = UDim2.new(0, 40, 0, 40)
+    NIcon.Position = UDim2.new(0, 15, 0.5, -20)
+    NIcon.BackgroundTransparency = 1
+    NIcon.Text = "N"
+    NIcon.TextColor3 = COLORS.BrandRed
+    NIcon.Font = FONTS.Heavy
+    NIcon.TextSize = 28
+    NIcon.ZIndex = 201
+    NIcon.Parent = NotifFrame
+
+    local TitleLbl = Instance.new("TextLabel")
+    TitleLbl.Size = UDim2.new(1, -70, 0, 20)
+    TitleLbl.Position = UDim2.new(0, 60, 0, 15)
+    TitleLbl.BackgroundTransparency = 1
+    TitleLbl.Text = title
+    TitleLbl.TextColor3 = COLORS.White
+    TitleLbl.Font = FONTS.Bold
+    TitleLbl.TextSize = 14
+    TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLbl.ZIndex = 201
+    TitleLbl.Parent = NotifFrame
+
+    local DescLbl = Instance.new("TextLabel")
+    DescLbl.Size = UDim2.new(1, -70, 0, 20)
+    DescLbl.Position = UDim2.new(0, 60, 0, 35)
+    DescLbl.BackgroundTransparency = 1
+    DescLbl.Text = desc
+    DescLbl.TextColor3 = COLORS.GreyLight
+    DescLbl.Font = FONTS.Book
+    DescLbl.TextSize = 12
+    DescLbl.TextXAlignment = Enum.TextXAlignment.Left
+    DescLbl.ZIndex = 201
+    DescLbl.Parent = NotifFrame
+
+    PlaySoundAsync(SOUND_URLS.Intro, "Intro", 0.5)
+
+    TweenService:Create(NotifFrame, TweenInfo.new(0.6, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+        Position = UDim2.new(1, -20, 1, -90)
+    }):Play()
+
+    task.delay(4, function()
+        local outTween = TweenService:Create(NotifFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(1, 10, 1, -90)
+        })
+        outTween:Play()
+        outTween.Completed:Wait()
+        NotifFrame:Destroy()
+    end)
+end
+
+-- Background Github Polling
+task.spawn(function()
+    while task.wait(60) do 
+        if FetchMovies() then
+            ShowNetflixNotification("Script Update Detected", "The movies list has been updated on GitHub.")
+        end
+    end
+end)
+
 local startSize = getTargetSize()
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
@@ -423,11 +520,12 @@ BrandLogo.TextXAlignment = Enum.TextXAlignment.Left
 BrandLogo.ZIndex = 11
 BrandLogo.Parent = HeaderBar
 
-local TabNavContainer = Instance.new("Frame")
+local TabNavContainer = Instance.new("ScrollingFrame")
 TabNavContainer.Name = "TabNavContainer"
-TabNavContainer.Size = UDim2.new(0, 360, 1, 0)
+TabNavContainer.Size = UDim2.new(1, -260, 1, 0) 
 TabNavContainer.Position = UDim2.new(0, 180, 0, 0)
 TabNavContainer.BackgroundTransparency = 1
+TabNavContainer.ScrollBarThickness = 0
 TabNavContainer.ZIndex = 11
 TabNavContainer.Parent = HeaderBar
 
@@ -468,6 +566,15 @@ local ExecutorTab = makeTextTab("Director's Cut", 100)
 local SettingsTab = makeTextTab("Settings", 65)
 local CreditsTab = makeTextTab("Credits", 55)
 
+local AdminTab
+if IsAdmin(LocalPlayer.UserId) then
+    AdminTab = makeTextTab("Admin", 55)
+end
+
+TabNavLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    TabNavContainer.CanvasSize = UDim2.new(0, TabNavLayout.AbsoluteContentSize.X + 20, 0, 0)
+end)
+
 local function updateTabLine(targetTab)
     local absolutePos = targetTab.AbsolutePosition
     local relativeX = absolutePos.X - MainFrame.AbsolutePosition.X
@@ -475,7 +582,11 @@ local function updateTabLine(targetTab)
         Size = UDim2.new(0, targetTab.AbsoluteSize.X, 0, 2),
         Position = UDim2.new(0, relativeX, 0, 46)
     }):Play()
-    for _, otherTab in ipairs({MoviesTab, ExecutorTab, SettingsTab, CreditsTab}) do
+    
+    local allTabs = {MoviesTab, ExecutorTab, SettingsTab, CreditsTab}
+    if AdminTab then table.insert(allTabs, AdminTab) end
+    
+    for _, otherTab in ipairs(allTabs) do
         local active = (otherTab == targetTab)
         TweenService:Create(otherTab, TweenInfo.new(0.2), {
             TextColor3 = active and COLORS.White or COLORS.GreyMuted
@@ -591,7 +702,6 @@ FilterRow.ZIndex = 2
 FilterRow.Parent = MenuFrame
 
 local CurrentGenre = "All"
-local updateCarousel
 
 local GenreBtn = Instance.new("TextButton")
 GenreBtn.Name = "GenreBtn"
@@ -652,7 +762,7 @@ for _, genre in ipairs(GenresList) do
         CurrentGenre = genre
         GenreBtn.Text = "Genre: " .. genre .. " "
         GenreDropdown.Visible = false
-        updateCarousel()
+        if updateCarousel then updateCarousel() end
     end)
 end
 
@@ -749,7 +859,7 @@ for _, tagName in ipairs(UniqueTags) do
             TweenService:Create(tBtn, TweenInfo.new(0.2), {BackgroundColor3 = COLORS.BrandRed, TextColor3 = COLORS.White}):Play()
             stroke.Color = COLORS.BrandRed
         end
-        updateCarousel()
+        if updateCarousel then updateCarousel() end
     end)
 end
 
@@ -1091,6 +1201,110 @@ CreditsDescription.TextColor3 = COLORS.GreyMuted
 CreditsDescription.Font = FONTS.Medium
 CreditsDescription.TextSize = 13
 CreditsDescription.Parent = CreditsContent
+
+-- ### ADMIN PANEL ###
+local AdminFrame
+local AdminCodeInput
+if IsAdmin(LocalPlayer.UserId) then
+    AdminFrame = Instance.new("Frame")
+    AdminFrame.Name = "AdminFrame"
+    AdminFrame.Size = UDim2.new(1, 0, 1, -52)
+    AdminFrame.Position = UDim2.new(0, 0, 0, 52)
+    AdminFrame.BackgroundTransparency = 1
+    AdminFrame.Visible = false
+    AdminFrame.Parent = MainFrame
+
+    local AdminBody = Instance.new("Frame")
+    AdminBody.Size = UDim2.new(1, -36, 1, -24)
+    AdminBody.Position = UDim2.new(0, 18, 0, 12)
+    AdminBody.BackgroundTransparency = 1
+    AdminBody.Parent = AdminFrame
+    
+    local CommandListText = Instance.new("TextLabel")
+    CommandListText.Size = UDim2.new(1, 0, 0, 30)
+    CommandListText.BackgroundTransparency = 1
+    CommandListText.Text = "Global Target Commands: /Kill [name/all] • /Kick [name/all] • /Bring [name/all]"
+    CommandListText.Font = FONTS.Bold
+    CommandListText.TextSize = 13
+    CommandListText.TextColor3 = COLORS.GreyLight
+    CommandListText.TextXAlignment = Enum.TextXAlignment.Left
+    CommandListText.Parent = AdminBody
+
+    AdminCodeInput = Instance.new("TextBox")
+    AdminCodeInput.Size = UDim2.new(1, 0, 1, -95)
+    AdminCodeInput.Position = UDim2.new(0, 0, 0, 40)
+    AdminCodeInput.BackgroundColor3 = COLORS.DarkCard
+    AdminCodeInput.Text = ""
+    AdminCodeInput.PlaceholderText = "Enter command here and hit enter..."
+    AdminCodeInput.TextColor3 = COLORS.White
+    AdminCodeInput.Font = FONTS.Medium
+    AdminCodeInput.TextSize = 15
+    AdminCodeInput.TextXAlignment = Enum.TextXAlignment.Left
+    AdminCodeInput.TextYAlignment = Enum.TextYAlignment.Top
+    AdminCodeInput.ClearTextOnFocus = true
+    AdminCodeInput.Parent = AdminBody
+    createCorner(AdminCodeInput, 6)
+    createStroke(AdminCodeInput, COLORS.Border, 1)
+
+    local AdminPadding = Instance.new("UIPadding")
+    AdminPadding.PaddingTop = UDim.new(0, 10)
+    AdminPadding.PaddingLeft = UDim.new(0, 10)
+    AdminPadding.PaddingRight = UDim.new(0, 10)
+    AdminPadding.PaddingBottom = UDim.new(0, 10)
+    AdminPadding.Parent = AdminCodeInput
+
+    AdminCodeInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed and AdminCodeInput.Text ~= "" then
+            local text = AdminCodeInput.Text
+            local TextChatService = game:GetService("TextChatService")
+            if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+                TextChatService.TextChannels.RBXGeneral:SendAsync(text)
+            else
+                game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(text, "All")
+            end
+            AdminCodeInput.Text = ""
+        end
+    end)
+end
+
+-- ### COMMAND LISTENER (All Users) ###
+local function HandleAdminCommand(speaker, message)
+    if not IsAdmin(speaker.UserId) then return end
+    
+    local args = string.split(message, " ")
+    local cmd = string.lower(args[1])
+    local targetStr = args[2]
+    
+    if targetStr then
+        local myName = string.lower(LocalPlayer.Name)
+        local myDisplayName = string.lower(LocalPlayer.DisplayName)
+        targetStr = string.lower(targetStr)
+        
+        if string.sub(myName, 1, #targetStr) == targetStr or string.sub(myDisplayName, 1, #targetStr) == targetStr or targetStr == "all" then
+            
+            if cmd == "/kill" then
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.Health = 0
+                end
+            elseif cmd == "/kick" then
+                LocalPlayer:Kick("You have been kicked by an AN Administrator.")
+            elseif cmd == "/bring" then
+                if speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = speaker.Character.HumanoidRootPart.CFrame
+                end
+            end
+            
+        end
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    p.Chatted:Connect(function(msg) HandleAdminCommand(p, msg) end)
+end
+Players.PlayerAdded:Connect(function(p)
+    p.Chatted:Connect(function(msg) HandleAdminCommand(p, msg) end)
+end)
+
 
 local SettingsFrame = Instance.new("Frame")
 SettingsFrame.Name = "SettingsFrame"
@@ -1682,6 +1896,8 @@ local views = {
     credits = CreditsFrame,
     settings = SettingsFrame
 }
+if AdminFrame then views.admin = AdminFrame end
+
 local viewOrigins = {}
 for name, frame in pairs(views) do viewOrigins[name] = frame.Position end
 
@@ -1779,6 +1995,9 @@ MoviesTab.MouseButton1Click:Connect(function() updateTabLine(MoviesTab); routeTo
 ExecutorTab.MouseButton1Click:Connect(function() updateTabLine(ExecutorTab); routeToView("executor") end)
 SettingsTab.MouseButton1Click:Connect(function() updateTabLine(SettingsTab); routeToView("settings") end)
 CreditsTab.MouseButton1Click:Connect(function() updateTabLine(CreditsTab); routeToView("credits") end)
+if AdminTab then
+    AdminTab.MouseButton1Click:Connect(function() updateTabLine(AdminTab); routeToView("admin") end)
+end
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     currentIndex = 1
@@ -1823,7 +2042,6 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
 end)
 
 local ActiveTags = {}
-local CREATOR_ID = 1494561843
 
 pcall(function()
     LocalPlayer:SetAttribute("AN_ActiveUser", true)
@@ -1844,7 +2062,7 @@ end
 local function applyOverheadTag(player)
     cleanTag(player)
     if not Settings.ShowTags then return end
-    if player == LocalPlayer and player.UserId ~= CREATOR_ID then return end
+    if player == LocalPlayer and not IsAdmin(player.UserId) then return end
     local character = player.Character
     local head = character and character:WaitForChild("Head", 5)
     if not head then return end
@@ -1879,32 +2097,50 @@ local function applyOverheadTag(player)
     textLabel.Parent = frame
 
     local role = "AN Hub User"
-    if player.UserId == CREATOR_ID then role = "AN Founder" end
+    if player.UserId == CREATOR_ID then 
+        role = "AN Founder" 
+    elseif player.UserId == CO_FOUNDER_ID then
+        role = "AN Co-Founder"
+        
+        -- The Moving Yellow/Black Gradient for Co-Founder
+        local gradient = Instance.new("UIGradient")
+        gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(40, 40, 40)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 215, 0))
+        })
+        gradient.Rotation = 45
+        gradient.Parent = textLabel
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Gradient = gradient }
+    end
+    
     textLabel.Text = role
-
-    ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId }
+    
+    if not ActiveTags[player] then
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId }
+    end
 end
 
 local function managePlayer(player)
     player.CharacterAdded:Connect(function()
         task.wait(1)
-        if player:GetAttribute("AN_ActiveUser") or player.UserId == CREATOR_ID then applyOverheadTag(player) end
+        if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
     end)
     player:GetAttributeChangedSignal("AN_ActiveUser"):Connect(function()
         if player:GetAttribute("AN_ActiveUser") then applyOverheadTag(player) else cleanTag(player) end
     end)
-    if player:GetAttribute("AN_ActiveUser") or player.UserId == CREATOR_ID then applyOverheadTag(player) end
+    if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
 end
 
 Players.PlayerAdded:Connect(managePlayer)
 Players.PlayerRemoving:Connect(cleanTag)
 for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then managePlayer(p) end end
-if LocalPlayer.UserId == CREATOR_ID then managePlayer(LocalPlayer) end
+if IsAdmin(LocalPlayer.UserId) then managePlayer(LocalPlayer) end
 
 updateOverheadVisibility = function()
     if Settings.ShowTags then
         for _, p in ipairs(Players:GetPlayers()) do
-            if p:GetAttribute("AN_ActiveUser") or p.UserId == CREATOR_ID then applyOverheadTag(p) end
+            if p:GetAttribute("AN_ActiveUser") or IsAdmin(p.UserId) then applyOverheadTag(p) end
         end
     else
         for p, _ in pairs(ActiveTags) do cleanTag(p) end
@@ -1923,6 +2159,10 @@ RunService.Heartbeat:Connect(function()
                     local lerpedColor = customBlack:Lerp(customRed, formula)
                     data.TextLabel.TextColor3 = lerpedColor
                     data.Stroke.Color = lerpedColor
+                elseif data.UserId == CO_FOUNDER_ID and data.Gradient then
+                    -- Moving the gradient dynamically for Co-Founder
+                    data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0)
+                    data.Stroke.Color = Color3.fromRGB(255, 215, 0) -- Yellow Border
                 else
                     local formula = (math.sin(clock * 3) + 1) / 2
                     local neonBase = Color3.fromRGB(0, 220, 255)
@@ -1973,5 +2213,5 @@ if isUserBlacklisted then
 else
     routeToView("menu")
     updateTabLine(MoviesTab)
-    updateCarousel()
+    if updateCarousel then updateCarousel() end
 end
