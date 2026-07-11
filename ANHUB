@@ -150,8 +150,6 @@ task.spawn(function()
         TweenService:Create(imageLabel, TweenInfo.new(0.4), {ImageTransparency = 0}):Play()
     end
 end)
-
-
 end
 local SOUNDS_CACHE = {}
 local function PlaySoundAsync(url, name, vol)
@@ -186,8 +184,6 @@ task.spawn(function()
         sfx.Ended:Connect(function() sfx:Destroy() end)
     end
 end)
-
-
 end
 local function BindInteractionSounds(guiElement)
 if not guiElement:IsA("GuiButton") then return end
@@ -300,8 +296,6 @@ UserInputService.InputChanged:Connect(function(input)
         )
     end
 end)
-
-
 end
 local IntroFrame = Instance.new("Frame")
 IntroFrame.Name = "IntroFrame"
@@ -368,8 +362,6 @@ fadeBg:Play()
 fadeBg.Completed:Wait()
 
 IntroFrame:Destroy()
-
-
 end
 local HeaderBar = Instance.new("Frame")
 HeaderBar.Name = "HeaderBar"
@@ -452,8 +444,6 @@ for _, otherTab in ipairs({MoviesTab, ExecutorTab, SettingsTab, CreditsTab}) do
         TextColor3 = active and COLORS.White or COLORS.GreyMuted
     }):Play()
 end
-
-
 end
 local ActionsHolder = Instance.new("Frame")
 ActionsHolder.Name = "ActionsHolder"
@@ -507,6 +497,38 @@ createCorner(MinimizedPill, 28)
 local MinimizedStroke = createStroke(MinimizedPill, COLORS.BrandRed, 2, 0.1)
 BindInteractionSounds(MinimizedPill)
 makeDraggable(MinimizedPill, MinimizedPill)
+local isMinimized = false
+local cachedWindowPos = MainFrame.Position
+local cachedPillPos = nil
+local function clampPosition(pos, size)
+local viewport = Camera.ViewportSize
+local x = math.clamp(pos.X.Offset, 0, math.max(viewport.X - size.X.Offset, 0))
+local y = math.clamp(pos.Y.Offset, 0, math.max(viewport.Y - size.Y.Offset, 0))
+return UDim2.new(0, x, 0, y)
+end
+local function setMinimized(state)
+isMinimized = state
+if state then
+cachedWindowPos = MainFrame.Position
+if not cachedPillPos then
+local viewport = Camera.ViewportSize
+cachedPillPos = UDim2.new(0, 30, 0, viewport.Y / 2 - 28)
+end
+    MinimizedPill.Position = clampPosition(cachedPillPos, MinimizedPill.Size)
+    MainFrame.Visible = false
+    MinimizedPill.Visible = true
+    MinimizedPill.Size = UDim2.new(0, 0, 0, 0)
+    
+    TweenService:Create(MinimizedPill, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 56, 0, 56)
+    }):Play()
+else
+    cachedPillPos = MinimizedPill.Position
+    MinimizedPill.Visible = false
+    MainFrame.Position = clampPosition(cachedWindowPos, MainFrame.Size)
+    MainFrame.Visible = true
+end
+end
 local MenuFrame = Instance.new("Frame")
 MenuFrame.Name = "MenuFrame"
 MenuFrame.Size = UDim2.new(1, 0, 1, -52)
@@ -547,7 +569,7 @@ createStroke(GenreDropdown, COLORS.Border, 1, 0.4)
 local GenreLayout = Instance.new("UIListLayout")
 GenreLayout.SortOrder = Enum.SortOrder.LayoutOrder
 GenreLayout.Parent = GenreDropdown
-local GenresList = {"All", "My List", "Action", "Documentary", "Sci-Fi"}
+local GenresList = {"All", "My List", "Action", "Documentary", "Sci-Fi", "Insta Move"}
 for i, genre in ipairs(GenresList) do
 local gBtn = Instance.new("TextButton")
 gBtn.Size = UDim2.new(1, 0, 0, 26)
@@ -569,8 +591,6 @@ gBtn.MouseButton1Click:Connect(function()
     GenreDropdown.Visible = false
     updateCarousel()
 end)
-
-
 end
 GenreBtn.MouseButton1Click:Connect(function()
 GenreDropdown.Visible = not GenreDropdown.Visible
@@ -731,12 +751,14 @@ DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
 DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
 DetailDescription.TextWrapped = true
 DetailDescription.Parent = InfoPanel
+
 local ButtonRow = Instance.new("Frame")
 ButtonRow.Name = "ButtonRow"
 ButtonRow.Size = UDim2.new(1, 0, 0, 44)
-ButtonRow.Position = UDim2.new(0, 0, 1, -44)
+ButtonRow.Position = UDim2.new(0, 0, 1, -54)
 ButtonRow.BackgroundTransparency = 1
 ButtonRow.Parent = InfoPanel
+
 local ButtonLayout = Instance.new("UIListLayout")
 ButtonLayout.FillDirection = Enum.FillDirection.Horizontal
 ButtonLayout.Padding = UDim.new(0, 12)
@@ -794,8 +816,9 @@ ExecBody.Size = UDim2.new(1, -36, 1, -24)
 ExecBody.Position = UDim2.new(0, 18, 0, 12)
 ExecBody.BackgroundTransparency = 1
 ExecBody.Parent = ExecutorFrame
+
 local CodeInput = Instance.new("TextBox")
-CodeInput.Size = UDim2.new(1, 0, 1, -50)
+CodeInput.Size = UDim2.new(1, 0, 1, -55)
 CodeInput.Position = UDim2.new(0, 0, 0, 0)
 CodeInput.BackgroundColor3 = COLORS.DarkCard
 CodeInput.Text = "print('Action!')"
@@ -815,9 +838,10 @@ CodePadding.PaddingLeft = UDim.new(0, 10)
 CodePadding.PaddingRight = UDim.new(0, 10)
 CodePadding.PaddingBottom = UDim.new(0, 10)
 CodePadding.Parent = CodeInput
+
 local ExecActionBtn = Instance.new("TextButton")
 ExecActionBtn.Size = UDim2.new(0, 150, 0, 40)
-ExecActionBtn.Position = UDim2.new(1, -150, 1, -40)
+ExecActionBtn.Position = UDim2.new(1, -160, 1, -45)
 ExecActionBtn.BackgroundColor3 = COLORS.BrandRed
 ExecActionBtn.Text = "Execute"
 ExecActionBtn.Font = FONTS.Bold
@@ -827,9 +851,10 @@ ExecActionBtn.AutoButtonColor = false
 ExecActionBtn.Parent = ExecBody
 createCorner(ExecActionBtn, 4)
 BindInteractionSounds(ExecActionBtn)
+
 local ExecClearBtn = Instance.new("TextButton")
 ExecClearBtn.Size = UDim2.new(0, 90, 0, 40)
-ExecClearBtn.Position = UDim2.new(1, -250, 1, -40)
+ExecClearBtn.Position = UDim2.new(1, -260, 1, -45)
 ExecClearBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 ExecClearBtn.Text = "Clear"
 ExecClearBtn.Font = FONTS.Bold
@@ -840,6 +865,7 @@ ExecClearBtn.Parent = ExecBody
 createCorner(ExecClearBtn, 4)
 createStroke(ExecClearBtn, COLORS.Border, 1)
 BindInteractionSounds(ExecClearBtn)
+
 ExecActionBtn.MouseButton1Click:Connect(function()
 pcall(function()
 local func = loadstring(CodeInput.Text)
@@ -940,8 +966,6 @@ actionContainer.BackgroundTransparency = 1
 actionContainer.Parent = row
 
 return actionContainer, row
-
-
 end
 local function makeActionBtn(parent, text, color)
 local btn = Instance.new("TextButton")
@@ -959,8 +983,6 @@ btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), 
 btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)}):Play() end)
 
 return btn
-
-
 end
 local function updateDynamicThemeColors(newColor)
 COLORS.BrandRed = newColor
@@ -977,8 +999,6 @@ for _, dot in ipairs(DotsHolder:GetChildren()) do
         dot.BackgroundColor3 = newColor
     end
 end
-
-
 end
 local OverheadToggleContainer = createSettingRow("Overhead User Tags")
 local tagToggleLayout = Instance.new("UIListLayout")
@@ -1024,8 +1044,6 @@ if res and res.StatusCode == 200 then
         TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
     end
 end
-
-
 end)
 local ServerIdActions = createSettingRow("Server ID Management")
 local idLayout = Instance.new("UIListLayout")
@@ -1112,8 +1130,6 @@ colorBtn.Parent = ThemeActions
 createCorner(colorBtn, 12)
 BindInteractionSounds(colorBtn)
 colorBtn.MouseButton1Click:Connect(function() applyNewTheme(color) end)
-
-
 end
 SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 20)
 SettingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -1161,8 +1177,6 @@ for i, card in ipairs(MovieCarousel:GetChildren()) do
         end
     end
 end
-
-
 end
 local function updateDots()
 DotsHolder:ClearAllChildren()
@@ -1187,8 +1201,6 @@ for i = 1, #visibleMovies do
         dot.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     end
 end
-
-
 end
 local viewDetailScreen
 local function createMovieCard(movie, index)
@@ -1255,8 +1267,6 @@ clickSensor.MouseLeave:Connect(function()
 end)
 
 return card
-
-
 end
 updateCarousel = function()
 MovieCarousel:ClearAllChildren()
@@ -1282,8 +1292,6 @@ task.defer(function()
     layoutCards(true)
     updateDots()
 end)
-
-
 end
 local function shiftCarousel(step)
 if #visibleMovies == 0 then return end
@@ -1333,8 +1341,6 @@ task.delay(0.15, function()
 end)
 
 activeView = viewName
-
-
 end
 local currentPlayConnection = nil
 local currentFavConnection = nil
@@ -1349,7 +1355,16 @@ if currentPlayConnection then currentPlayConnection:Disconnect() end
 if currentFavConnection then currentFavConnection:Disconnect() end
 
 currentPlayConnection = PlayBtn.MouseButton1Click:Connect(function()
-    pcall(function() loadstring(movie.Loadstring)() end)
+    task.spawn(function()
+        pcall(function() 
+            local func = loadstring(movie.Loadstring)
+            if func then func() end 
+        end)
+    end)
+    
+    if movie.Genre == "Insta Move" then
+        setMinimized(true)
+    end
 end)
 
 FavBtn.Text = isFavorite(movie.Title) and "✔️ My List" or "+ My List"
@@ -1360,8 +1375,6 @@ currentFavConnection = FavBtn.MouseButton1Click:Connect(function()
 end)
 
 routeToView("detail")
-
-
 end
 PlayBtn.MouseEnter:Connect(function() TweenService:Create(PlayBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(math.max(0, COLORS.BrandRed.R * 255 - 40), math.max(0, COLORS.BrandRed.G * 255 - 40), math.max(0, COLORS.BrandRed.B * 255 - 40))}):Play() end)
 PlayBtn.MouseLeave:Connect(function() TweenService:Create(PlayBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.BrandRed}):Play() end)
@@ -1382,40 +1395,6 @@ end)
 CarouselContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 layoutCards(true)
 end)
-local isMinimized = false
-local cachedWindowPos = MainFrame.Position
-local cachedPillPos = nil
-local function clampPosition(pos, size)
-local viewport = Camera.ViewportSize
-local x = math.clamp(pos.X.Offset, 0, math.max(viewport.X - size.X.Offset, 0))
-local y = math.clamp(pos.Y.Offset, 0, math.max(viewport.Y - size.Y.Offset, 0))
-return UDim2.new(0, x, 0, y)
-end
-local function setMinimized(state)
-isMinimized = state
-if state then
-cachedWindowPos = MainFrame.Position
-if not cachedPillPos then
-local viewport = Camera.ViewportSize
-cachedPillPos = UDim2.new(0, 30, 0, viewport.Y / 2 - 28)
-end
-    MinimizedPill.Position = clampPosition(cachedPillPos, MinimizedPill.Size)
-    MainFrame.Visible = false
-    MinimizedPill.Visible = true
-    MinimizedPill.Size = UDim2.new(0, 0, 0, 0)
-    
-    TweenService:Create(MinimizedPill, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 56, 0, 56)
-    }):Play()
-else
-    cachedPillPos = MinimizedPill.Position
-    MinimizedPill.Visible = false
-    MainFrame.Position = clampPosition(cachedWindowPos, MainFrame.Size)
-    MainFrame.Visible = true
-end
-
-
-end
 MinimizeBtn.MouseButton1Click:Connect(function() setMinimized(true) end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 if not gameProcessed then
@@ -1449,57 +1428,6 @@ MainFrame.Size = UDim2.new(
 0, math.min(targetSize.Y.Offset, viewport.Y - 24)
 )
 end)
-local ResizeGrip = Instance.new("Frame")
-ResizeGrip.Name = "ResizeGrip"
-ResizeGrip.Size = UDim2.new(0, 18, 0, 18)
-ResizeGrip.Position = UDim2.new(1, -18, 1, -18)
-ResizeGrip.BackgroundTransparency = 1
-ResizeGrip.ZIndex = 25
-ResizeGrip.Parent = MainFrame
-local function makeDiagonalLine(thickness, length, xOffset, yOffset)
-local line = Instance.new("Frame")
-line.Size = UDim2.new(0, thickness, 0, length)
-line.Position = UDim2.new(0.5, xOffset, 0.5, yOffset)
-line.Rotation = 45
-line.BackgroundColor3 = COLORS.GreyLight
-line.BorderSizePixel = 0
-line.ZIndex = 26
-line.Parent = ResizeGrip
-return line
-end
-makeDiagonalLine(1.5, 6, 4, 4)
-makeDiagonalLine(1.5, 10, 1, 1)
-makeDiagonalLine(1.5, 14, -2, -2)
-local resizing = false
-local resizeStartSize = nil
-local resizeStartInputPos = nil
-ResizeGrip.InputBegan:Connect(function(input)
-if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-resizing = true
-resizeStartSize = Vector2.new(MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y)
-resizeStartInputPos = input.Position
-    input.Changed:Connect(function()
-        if input.UserInputState == Enum.UserInputState.End then
-            resizing = false
-            WindowConfig.Width = MainFrame.Size.X.Offset
-            WindowConfig.Height = MainFrame.Size.Y.Offset
-            saveWindowConfig()
-        end
-    end)
-end
-
-
-end)
-UserInputService.InputChanged:Connect(function(input)
-if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-local delta = input.Position - resizeStartInputPos
-local newW = math.clamp(resizeStartSize.X + delta.X, 550, 950)
-local newH = math.clamp(resizeStartSize.Y + delta.Y, 350, 650)
-    MainFrame.Size = UDim2.new(0, newW, 0, newH)
-end
-
-
-end)
 local ActiveTags = {}
 local CREATOR_ID = 1494561843
 pcall(function()
@@ -1516,52 +1444,56 @@ ActiveTags[player] = nil
 end
 end
 local function applyOverheadTag(player)
-cleanTag(player)
-if not Settings.ShowTags then return end
-if player == LocalPlayer and player.UserId ~= CREATOR_ID then return end 
+    cleanTag(player)
+    if not Settings.ShowTags then return end
+    if player == LocalPlayer and player.UserId ~= CREATOR_ID then return end 
 
-local character = player.Character
-local head = character and character:WaitForChild("Head", 5)
-if not head then return end
+    local character = player.Character
+    local head = character and character:WaitForChild("Head", 5)
+    if not head then return end
 
-local bill = Instance.new("BillboardGui")
-bill.Name = "AN_UserTag"
-bill.AlwaysOnTop = true
-bill.Size = UDim2.new(0, 140, 0, 36)
-bill.StudsOffset = Vector3.new(0, 2.5, 0)
-bill.Adornee = head
-bill.Parent = head
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "AN_UserTag"
+    bill.AlwaysOnTop = true
+    bill.Size = UDim2.new(4.5, 0, 1.2, 0) 
+    bill.StudsOffset = Vector3.new(0, 2.5, 0)
+    bill.Adornee = head
+    bill.Parent = head
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(1, 0, 1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-frame.BackgroundTransparency = 0.25
-frame.Parent = bill
-createCorner(frame, 6)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    frame.BackgroundTransparency = 0.25
+    frame.Parent = bill
+    createCorner(frame, 6)
 
-local tagStroke = createStroke(frame, COLORS.Border, 1.5)
+    local tagStroke = createStroke(frame, COLORS.Border, 1.5)
 
-local textLabel = Instance.new("TextLabel")
-textLabel.Size = UDim2.new(1, 0, 1, 0)
-textLabel.BackgroundTransparency = 1
-textLabel.Font = FONTS.Bold
-textLabel.TextSize = 12
-textLabel.Parent = frame
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = FONTS.Bold
+    textLabel.TextScaled = true
+    
+    local textConstraint = Instance.new("UITextSizeConstraint")
+    textConstraint.MaxTextSize = 14
+    textConstraint.MinTextSize = 6
+    textConstraint.Parent = textLabel
+    
+    textLabel.Parent = frame
 
-local role = "AN Hub User"
-if player.UserId == CREATOR_ID then
-    role = "AN Founder"
-end
-textLabel.Text = role
+    local role = "AN Hub User"
+    if player.UserId == CREATOR_ID then
+        role = "AN Founder"
+    end
+    textLabel.Text = role
 
-ActiveTags[player] = {
-    Gui = bill,
-    TextLabel = textLabel,
-    Stroke = tagStroke,
-    UserId = player.UserId
-}
-
-
+    ActiveTags[player] = {
+        Gui = bill,
+        TextLabel = textLabel,
+        Stroke = tagStroke,
+        UserId = player.UserId
+    }
 end
 local function managePlayer(player)
 player.CharacterAdded:Connect(function()
@@ -1581,8 +1513,6 @@ end)
 if player:GetAttribute("AN_ActiveUser") or player.UserId == CREATOR_ID then
     applyOverheadTag(player)
 end
-
-
 end
 Players.PlayerAdded:Connect(managePlayer)
 Players.PlayerRemoving:Connect(cleanTag)
@@ -1631,15 +1561,12 @@ local lerpedColor = customBlack:Lerp(customRed, formula)
         end
     end)
 end
-
-
 end)
 updateDynamicThemeColors(CurrentThemeColor)
 playIntroAnimation()
 if isUserBlacklisted then
 MenuFrame:Destroy()
 HeaderBar:Destroy()
-ResizeGrip:Destroy()
 local SuspendText = Instance.new("TextLabel")
 SuspendText.Size = UDim2.new(1, 0, 1, -60)
 SuspendText.BackgroundTransparency = 1
@@ -1668,7 +1595,6 @@ task.delay(3, function()
     windowFade.Completed:Wait()
     ScreenGui:Destroy()
 end)
-
 
 else
 routeToView("menu")
