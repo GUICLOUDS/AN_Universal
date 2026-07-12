@@ -9,13 +9,85 @@ local TextService = game:GetService("TextService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+local JobId = game.JobId
+if JobId == "" then JobId = "TestServer" end -- Fallback for Studio testing
+local BASE_URL = "https://anuni-21a0e-default-rtdb.firebaseio.com/"
+local http_request = request or http_request or (syn and syn.request)
+
 local CREATOR_ID = 1494561843
 local CO_FOUNDER_ID = 11084026865
 
+-- ==========================================
+-- 1. HELPER FUNCTIONS
+-- ==========================================
 local function IsAdmin(userId)
     return userId == CREATOR_ID or userId == CO_FOUNDER_ID
 end
 
+local function parseDuration(durationStr)
+    if not durationStr or durationStr == "-1" then return -1 end
+    
+    local num = tonumber(durationStr:match("%d+"))
+    local unit = durationStr:match("%a+"):lower()
+    if not num then return -1 end
+    
+    if unit:find("min") then return num * 60
+    elseif unit:find("hour") then return num * 3600
+    elseif unit:find("day") then return num * 86400
+    end
+    return -1
+end
+
+local function formatRemainingTime(expiresTimestamp)
+    if expiresTimestamp == -1 then return "Permanent" end
+    local remaining = expiresTimestamp - os.time()
+    if remaining <= 0 then return "Expired" end
+    
+    local days = math.floor(remaining / 86400)
+    local hours = math.floor((remaining % 86400) / 3600)
+    local minutes = math.floor((remaining % 3600) / 60)
+    
+    if days > 0 then return string.format("%d days, %d hours", days, hours)
+    elseif hours > 0 then return string.format("%d hours, %d minutes", hours, minutes)
+    else return string.format("%d minutes", minutes)
+    end
+end
+
+-- ==========================================
+-- 2. FIREBASE NETWORKING
+-- ==========================================
+local function checkIn()
+    if not http_request then return end
+    local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
+    local data = HttpService:JSONEncode({
+        username = LocalPlayer.Name,
+        timestamp = os.time()
+    })
+    
+    http_request({
+        Url = userUrl,
+        Method = "PUT",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = data
+    })
+end
+
+local function checkOut()
+    if not http_request then return end
+    local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
+    http_request({
+        Url = userUrl,
+        Method = "DELETE"
+    })
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        checkOut()
+    end
+end)
+
+-- File Setup
 pcall(function()
     if makefolder and isfolder and not isfolder("AN") then
         makefolder("AN")
@@ -33,26 +105,41 @@ local SOUND_URLS = {
 }
 
 local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json"
-local CLOUD_BLACKLIST_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/blacklist.jsom"
 
-local BlacklistedIDs = { 12345678, 87654321 }
-local isUserBlacklisted = table.find(BlacklistedIDs, LocalPlayer.UserId) ~= nil
+-- ==========================================
+-- 3. BLACKLIST CHECK ON STARTUP
+-- ==========================================
+local isUserBlacklisted = false
+local banTimeText = ""
 
-pcall(function()
-    local res = game:HttpGet(CLOUD_BLACKLIST_URL)
-    local decoded = HttpService:JSONDecode(res)
-    if decoded and type(decoded) == "table" then
-        if table.find(decoded, LocalPlayer.UserId) then
-            isUserBlacklisted = true
+if http_request then
+    local blacklistCheck = http_request({
+        Url = BASE_URL .. "blacklist/" .. tostring(LocalPlayer.UserId) .. ".json",
+        Method = "GET"
+    })
+
+    if blacklistCheck and blacklistCheck.StatusCode == 200 and blacklistCheck.Body ~= "null" then
+        local banData = HttpService:JSONDecode(blacklistCheck.Body)
+        if banData then
+            if banData.expires == -1 or banData.expires > os.time() then
+                isUserBlacklisted = true
+                banTimeText = formatRemainingTime(banData.expires)
+            else
+                -- Ban expired, remove them from Firebase
+                http_request({
+                    Url = BASE_URL .. "blacklist/" .. tostring(LocalPlayer.UserId) .. ".json",
+                    Method = "DELETE"
+                })
+            end
         end
     end
-end)
+end
 
 local MOVIES = {}
 local TagCounts = {}
 local UniqueTags = {}
 local LastMoviesData = nil
-local updateCarousel -- Forward declaration
+local updateCarousel 
 
 local function FetchMovies()
     pcall(function()
@@ -304,7 +391,6 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- ### NETFLIX AUTO UPDATE NOTIFICATION SYSTEM ###
 local function ShowNetflixNotification(title, desc)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 320, 0, 70)
@@ -368,7 +454,6 @@ local function ShowNetflixNotification(title, desc)
     end)
 end
 
--- Background Github Polling
 task.spawn(function()
     while task.wait(60) do 
         if FetchMovies() then
@@ -1202,9 +1287,11 @@ CreditsDescription.Font = FONTS.Medium
 CreditsDescription.TextSize = 13
 CreditsDescription.Parent = CreditsContent
 
--- ### ADMIN PANEL ###
+-- ### ADMIN PANEL REDESIGN ###
 local AdminFrame
 local AdminCodeInput
+local PlayersScroll
+
 if IsAdmin(LocalPlayer.UserId) then
     AdminFrame = Instance.new("Frame")
     AdminFrame.Name = "AdminFrame"
@@ -1220,19 +1307,119 @@ if IsAdmin(LocalPlayer.UserId) then
     AdminBody.BackgroundTransparency = 1
     AdminBody.Parent = AdminFrame
     
-    local CommandListText = Instance.new("TextLabel")
-    CommandListText.Size = UDim2.new(1, 0, 0, 30)
-    CommandListText.BackgroundTransparency = 1
-    CommandListText.Text = "Global Target Commands: /Kill [name/all] • /Kick [name/all] • /Bring [name/all]"
-    CommandListText.Font = FONTS.Bold
-    CommandListText.TextSize = 13
-    CommandListText.TextColor3 = COLORS.GreyLight
-    CommandListText.TextXAlignment = Enum.TextXAlignment.Left
-    CommandListText.Parent = AdminBody
+    -- Command List Section (Left)
+    local LeftPanel = Instance.new("Frame")
+    LeftPanel.Size = UDim2.new(0.48, 0, 1, -55)
+    LeftPanel.Position = UDim2.new(0, 0, 0, 0)
+    LeftPanel.BackgroundTransparency = 1
+    LeftPanel.Parent = AdminBody
 
+    local CommandsTitle = Instance.new("TextLabel")
+    CommandsTitle.Size = UDim2.new(1, 0, 0, 20)
+    CommandsTitle.BackgroundTransparency = 1
+    CommandsTitle.Text = "Command List"
+    CommandsTitle.Font = FONTS.Bold
+    CommandsTitle.TextSize = 14
+    CommandsTitle.TextColor3 = COLORS.White
+    CommandsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    CommandsTitle.Parent = LeftPanel
+
+    local CommandsScroll = Instance.new("ScrollingFrame")
+    CommandsScroll.Size = UDim2.new(1, 0, 1, -25)
+    CommandsScroll.Position = UDim2.new(0, 0, 0, 25)
+    CommandsScroll.BackgroundColor3 = COLORS.DarkCard
+    CommandsScroll.BorderSizePixel = 0
+    CommandsScroll.ScrollBarThickness = 4
+    CommandsScroll.ScrollBarImageColor3 = COLORS.BrandRed
+    CommandsScroll.Parent = LeftPanel
+    createCorner(CommandsScroll, 6)
+    createStroke(CommandsScroll, COLORS.Border, 1)
+
+    local CLayout = Instance.new("UIListLayout")
+    CLayout.Padding = UDim.new(0, 5)
+    CLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    CLayout.Parent = CommandsScroll
+
+    local CPadding = Instance.new("UIPadding")
+    CPadding.PaddingTop = UDim.new(0, 5)
+    CPadding.PaddingLeft = UDim.new(0, 5)
+    CPadding.PaddingRight = UDim.new(0, 5)
+    CPadding.PaddingBottom = UDim.new(0, 5)
+    CPadding.Parent = CommandsScroll
+
+    CLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        CommandsScroll.CanvasSize = UDim2.new(0, 0, 0, CLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    local cmds = {
+        "/Kill [name/all]",
+        "/Kick [name/all]",
+        "/Bring [name/all]",
+        "/banui [userid] [reason] [duration]"
+    }
+
+    for _, cmdStr in ipairs(cmds) do
+        local cLbl = Instance.new("TextLabel")
+        cLbl.Size = UDim2.new(1, -5, 0, 30)
+        cLbl.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        cLbl.Text = " " .. cmdStr
+        cLbl.TextColor3 = COLORS.GreyLight
+        cLbl.Font = FONTS.Medium
+        cLbl.TextSize = 12
+        cLbl.TextXAlignment = Enum.TextXAlignment.Left
+        cLbl.Parent = CommandsScroll
+        createCorner(cLbl, 4)
+        createStroke(cLbl, COLORS.Border, 1, 0.5)
+    end
+
+    -- Active Users Section (Right)
+    local RightPanel = Instance.new("Frame")
+    RightPanel.Size = UDim2.new(0.48, 0, 1, -55)
+    RightPanel.Position = UDim2.new(0.52, 0, 0, 0)
+    RightPanel.BackgroundTransparency = 1
+    RightPanel.Parent = AdminBody
+
+    local PlayersTitle = Instance.new("TextLabel")
+    PlayersTitle.Size = UDim2.new(1, 0, 0, 20)
+    PlayersTitle.BackgroundTransparency = 1
+    PlayersTitle.Text = "Active Users (Click to copy ID)"
+    PlayersTitle.Font = FONTS.Bold
+    PlayersTitle.TextSize = 14
+    PlayersTitle.TextColor3 = COLORS.BrandRed
+    PlayersTitle.TextXAlignment = Enum.TextXAlignment.Left
+    PlayersTitle.Parent = RightPanel
+
+    PlayersScroll = Instance.new("ScrollingFrame")
+    PlayersScroll.Size = UDim2.new(1, 0, 1, -25)
+    PlayersScroll.Position = UDim2.new(0, 0, 0, 25)
+    PlayersScroll.BackgroundColor3 = COLORS.DarkCard
+    PlayersScroll.BorderSizePixel = 0
+    PlayersScroll.ScrollBarThickness = 4
+    PlayersScroll.ScrollBarImageColor3 = COLORS.BrandRed
+    PlayersScroll.Parent = RightPanel
+    createCorner(PlayersScroll, 6)
+    createStroke(PlayersScroll, COLORS.Border, 1)
+
+    local PLayout = Instance.new("UIListLayout")
+    PLayout.Padding = UDim.new(0, 5)
+    PLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    PLayout.Parent = PlayersScroll
+
+    local PPadding = Instance.new("UIPadding")
+    PPadding.PaddingTop = UDim.new(0, 5)
+    PPadding.PaddingLeft = UDim.new(0, 5)
+    PPadding.PaddingRight = UDim.new(0, 5)
+    PPadding.PaddingBottom = UDim.new(0, 5)
+    PPadding.Parent = PlayersScroll
+
+    PLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        PlayersScroll.CanvasSize = UDim2.new(0, 0, 0, PLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    -- Command Input Field (Bottom)
     AdminCodeInput = Instance.new("TextBox")
-    AdminCodeInput.Size = UDim2.new(1, 0, 1, -95)
-    AdminCodeInput.Position = UDim2.new(0, 0, 0, 40)
+    AdminCodeInput.Size = UDim2.new(1, 0, 0, 45)
+    AdminCodeInput.Position = UDim2.new(0, 0, 1, -45)
     AdminCodeInput.BackgroundColor3 = COLORS.DarkCard
     AdminCodeInput.Text = ""
     AdminCodeInput.PlaceholderText = "Enter command here and hit enter..."
@@ -1240,7 +1427,6 @@ if IsAdmin(LocalPlayer.UserId) then
     AdminCodeInput.Font = FONTS.Medium
     AdminCodeInput.TextSize = 15
     AdminCodeInput.TextXAlignment = Enum.TextXAlignment.Left
-    AdminCodeInput.TextYAlignment = Enum.TextYAlignment.Top
     AdminCodeInput.ClearTextOnFocus = true
     AdminCodeInput.Parent = AdminBody
     createCorner(AdminCodeInput, 6)
@@ -1274,6 +1460,47 @@ local function HandleAdminCommand(speaker, message)
     local args = string.split(message, " ")
     local cmd = string.lower(args[1])
     local targetStr = args[2]
+
+    -- Updated /banui integration via chat listener
+    -- Format: /banui [userid] [reason] [duration]
+    if cmd == "/banui" then
+        local targetUserId = args[2]
+        if not targetUserId then return end
+        
+        local durationStr = args[#args] -- Grabbing the last argument for duration
+        local reasonArgs = {}
+        
+        -- Loop between userid and duration to catch multi-word reasons
+        for i = 3, #args - 1 do
+            table.insert(reasonArgs, args[i])
+        end
+        
+        local reasonStr = table.concat(reasonArgs, " ")
+        if reasonStr == "" then reasonStr = "Banned via Admin Panel" end
+        
+        if durationStr then
+            local length = parseDuration(durationStr)
+            local expireTime = (length == -1) and -1 or (os.time() + length)
+            local payload = HttpService:JSONEncode({
+                expires = expireTime,
+                banned_by = speaker.Name,
+                reason = reasonStr
+            })
+            
+            task.spawn(function()
+                if http_request then
+                    http_request({
+                        Url = BASE_URL .. "blacklist/" .. targetUserId .. ".json",
+                        Method = "PUT",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = payload
+                    })
+                    print("AN Hub: Successfully banned User ID " .. targetUserId .. " | Reason: " .. reasonStr .. " | Duration: " .. durationStr)
+                end
+            end)
+        end
+        return
+    end
     
     if targetStr then
         local myName = string.lower(LocalPlayer.Name)
@@ -1623,7 +1850,10 @@ uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 uiLayout.Parent = UiActions
 
 local DestroyBtn = makeActionBtn(UiActions, "Destroy UI")
-DestroyBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+DestroyBtn.MouseButton1Click:Connect(function() 
+    pcall(function() checkOut() end)
+    ScreenGui:Destroy() 
+end)
 
 local ThemeActions = createSettingRow("Theme Color")
 local themeLayout = Instance.new("UIListLayout")
@@ -2042,15 +2272,7 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
 end)
 
 local ActiveTags = {}
-
-pcall(function()
-    LocalPlayer:SetAttribute("AN_ActiveUser", true)
-    if LocalPlayer.Character then LocalPlayer.Character:SetAttribute("AN_ActiveUser", true) end
-end)
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-    pcall(function() char:SetAttribute("AN_ActiveUser", true) end)
-end)
+local FirebaseActiveUsers = {}
 
 local function cleanTag(player)
     if ActiveTags[player] then
@@ -2102,7 +2324,6 @@ local function applyOverheadTag(player)
     elseif player.UserId == CO_FOUNDER_ID then
         role = "AN Co-Founder"
         
-        -- The Moving Yellow/Black Gradient for Co-Founder
         local gradient = Instance.new("UIGradient")
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
@@ -2121,15 +2342,115 @@ local function applyOverheadTag(player)
     end
 end
 
+-- ==========================================
+-- 4. BACKGROUND RADAR
+-- ==========================================
+task.spawn(function()
+    while task.wait(5) do
+        if http_request then
+            local response = http_request({
+                Url = BASE_URL .. "active_users/" .. JobId .. ".json",
+                Method = "GET"
+            })
+            
+            if response and response.StatusCode == 200 and response.Body ~= "null" then
+                local activeUsers = HttpService:JSONDecode(response.Body)
+                local userNames = {}
+                
+                if activeUsers then
+                    FirebaseActiveUsers = activeUsers
+                    for userIdStr, info in pairs(activeUsers) do
+                        table.insert(userNames, info.username)
+                    end
+                    
+                    if Settings.ShowTags then
+                        for _, player in ipairs(Players:GetPlayers()) do
+                            if FirebaseActiveUsers[tostring(player.UserId)] or IsAdmin(player.UserId) then
+                                if not ActiveTags[player] then
+                                    applyOverheadTag(player)
+                                end
+                            else
+                                cleanTag(player)
+                            end
+                        end
+                    end
+                else
+                    FirebaseActiveUsers = {}
+                end
+                
+                -- Updated Radar Update mapped to the newly redesigned Admin Panel buttons
+                if IsAdmin(LocalPlayer.UserId) and PlayersScroll then
+                    for _, child in ipairs(PlayersScroll:GetChildren()) do
+                        if child:IsA("TextButton") or child:IsA("TextLabel") then
+                            child:Destroy()
+                        end
+                    end
+
+                    local count = 0
+                    for userIdStr, info in pairs(FirebaseActiveUsers) do
+                        count = count + 1
+                        local pBtn = Instance.new("TextButton")
+                        pBtn.Size = UDim2.new(1, -5, 0, 30)
+                        pBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+                        pBtn.Text = " " .. info.username .. " (" .. userIdStr .. ")"
+                        pBtn.TextColor3 = COLORS.GreyLight
+                        pBtn.Font = FONTS.Bold
+                        pBtn.TextSize = 12
+                        pBtn.TextXAlignment = Enum.TextXAlignment.Left
+                        pBtn.AutoButtonColor = false
+                        pBtn.Parent = PlayersScroll
+                        createCorner(pBtn, 4)
+                        createStroke(pBtn, COLORS.Border, 1, 0.5)
+            
+                        BindInteractionSounds(pBtn)
+                        
+                        pBtn.MouseEnter:Connect(function()
+                            TweenService:Create(pBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(35, 35, 35), TextColor3 = COLORS.White}):Play()
+                        end)
+                        pBtn.MouseLeave:Connect(function()
+                            TweenService:Create(pBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(20, 20, 20), TextColor3 = COLORS.GreyLight}):Play()
+                        end)
+            
+                        pBtn.MouseButton1Click:Connect(function()
+                            if setclipboard then
+                                setclipboard(userIdStr)
+                                pBtn.Text = " Copied ID to Clipboard!"
+                                pBtn.TextColor3 = Color3.fromRGB(46, 125, 50)
+                                task.wait(1.5)
+                                if pBtn and pBtn.Parent then
+                                    pBtn.Text = " " .. info.username .. " (" .. userIdStr .. ")"
+                                    pBtn.TextColor3 = COLORS.White
+                                end
+                            end
+                        end)
+                    end
+
+                    if count == 0 then
+                        local emptyLbl = Instance.new("TextLabel")
+                        emptyLbl.Size = UDim2.new(1, 0, 0, 30)
+                        emptyLbl.BackgroundTransparency = 1
+                        emptyLbl.Text = "No active users found."
+                        emptyLbl.TextColor3 = COLORS.GreyMuted
+                        emptyLbl.Font = FONTS.Medium
+                        emptyLbl.TextSize = 12
+                        emptyLbl.Parent = PlayersScroll
+                    end
+                end
+            end
+        end
+    end
+end)
+
 local function managePlayer(player)
     player.CharacterAdded:Connect(function()
         task.wait(1)
-        if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
+        if FirebaseActiveUsers[tostring(player.UserId)] or IsAdmin(player.UserId) then 
+            applyOverheadTag(player) 
+        end
     end)
-    player:GetAttributeChangedSignal("AN_ActiveUser"):Connect(function()
-        if player:GetAttribute("AN_ActiveUser") then applyOverheadTag(player) else cleanTag(player) end
-    end)
-    if player:GetAttribute("AN_ActiveUser") or IsAdmin(player.UserId) then applyOverheadTag(player) end
+    if FirebaseActiveUsers[tostring(player.UserId)] or IsAdmin(player.UserId) then 
+        applyOverheadTag(player) 
+    end
 end
 
 Players.PlayerAdded:Connect(managePlayer)
@@ -2140,7 +2461,7 @@ if IsAdmin(LocalPlayer.UserId) then managePlayer(LocalPlayer) end
 updateOverheadVisibility = function()
     if Settings.ShowTags then
         for _, p in ipairs(Players:GetPlayers()) do
-            if p:GetAttribute("AN_ActiveUser") or IsAdmin(p.UserId) then applyOverheadTag(p) end
+            if FirebaseActiveUsers[tostring(p.UserId)] or IsAdmin(p.UserId) then applyOverheadTag(p) end
         end
     else
         for p, _ in pairs(ActiveTags) do cleanTag(p) end
@@ -2160,9 +2481,8 @@ RunService.Heartbeat:Connect(function()
                     data.TextLabel.TextColor3 = lerpedColor
                     data.Stroke.Color = lerpedColor
                 elseif data.UserId == CO_FOUNDER_ID and data.Gradient then
-                    -- Moving the gradient dynamically for Co-Founder
                     data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0)
-                    data.Stroke.Color = Color3.fromRGB(255, 215, 0) -- Yellow Border
+                    data.Stroke.Color = Color3.fromRGB(255, 215, 0)
                 else
                     local formula = (math.sin(clock * 3) + 1) / 2
                     local neonBase = Color3.fromRGB(0, 220, 255)
@@ -2180,6 +2500,11 @@ updateDynamicThemeColors(CurrentThemeColor)
 playIntroAnimation()
 
 if isUserBlacklisted then
+    -- ==========================================
+    -- SUSPENDED UI LOGIC
+    -- ==========================================
+    warn("AN Hub: Access Denied. Time Remaining: " .. banTimeText)
+    
     MenuFrame:Destroy()
     HeaderBar:Destroy()
     local SuspendText = Instance.new("TextLabel")
@@ -2195,7 +2520,7 @@ if isUserBlacklisted then
     SubText.Size = UDim2.new(1, 0, 0, 40)
     SubText.Position = UDim2.new(0, 0, 0.5, 30)
     SubText.BackgroundTransparency = 1
-    SubText.Text = "Your access to AN Universal has been revoked.\nError Code: 403 - Forbidden\n\nClosing window in 3 seconds..."
+    SubText.Text = "Your access to AN Universal has been revoked.\nTime Remaining: " .. banTimeText .. "\n\nClosing window in 3 seconds..."
     SubText.Font = FONTS.Medium
     SubText.TextSize = 14
     SubText.TextColor3 = COLORS.GreyLight
@@ -2211,6 +2536,10 @@ if isUserBlacklisted then
         ScreenGui:Destroy()
     end)
 else
+    -- ==========================================
+    -- INITIALIZE HUB (If not banned)
+    -- ==========================================
+    checkIn()
     routeToView("menu")
     updateTabLine(MoviesTab)
     if updateCarousel then updateCarousel() end
