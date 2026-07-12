@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local JobId = game.JobId
-if JobId == "" then JobId = "TestServer" end 
+if JobId == "" then JobId = "TestServer" end -- Fallback for Studio testing
 local BASE_URL = "https://anuni-21a0e-default-rtdb.firebaseio.com/"
 local http_request = request or http_request or (syn and syn.request)
 
@@ -25,15 +25,15 @@ local function IsAdmin(userId)
 end
 
 local function parseDuration(durationStr)
-    if not durationStr or durationStr == "-1" or durationStr:lower() == "perm" then return -1 end
+    if not durationStr or durationStr == "-1" then return -1 end
     
     local num = tonumber(durationStr:match("%d+"))
     local unit = durationStr:match("%a+"):lower()
-    if not num or not unit then return -1 end
+    if not num then return -1 end
     
     if unit:find("min") then return num * 60
-    elseif unit:find("hr") or unit:find("hour") then return num * 3600
-    elseif unit:find("yr") or unit:find("year") then return num * 31536000
+    elseif unit:find("hr") then return num * 3600
+    elseif unit:find("yr") then return num * 31536000
     end
     return -1
 end
@@ -54,41 +54,30 @@ local function formatRemainingTime(expiresTimestamp)
 end
 
 -- ==========================================
--- 2. FIREBASE NETWORKING (HEARTBEAT ADDED)
+-- 2. FIREBASE NETWORKING
 -- ==========================================
 local function checkIn()
     if not http_request then return end
-    local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
     
-    -- Heartbeat: Keeps the user marked as active every 30 seconds
+    -- Heartbeat loop to keep active session fresh and prevent "ghost" nametags on rejoin
     task.spawn(function()
-        while task.wait(30) do
+        while true do
+            local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
             local data = HttpService:JSONEncode({
                 username = LocalPlayer.Name,
                 timestamp = os.time()
             })
-            pcall(function()
-                http_request({
-                    Url = userUrl,
-                    Method = "PUT",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = data
-                })
-            end)
+            
+            http_request({
+                Url = userUrl,
+                Method = "PUT",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = data
+            })
+            
+            task.wait(30) -- Send heartbeat every 30 seconds
         end
     end)
-
-    -- Initial checkin
-    local initData = HttpService:JSONEncode({
-        username = LocalPlayer.Name,
-        timestamp = os.time()
-    })
-    http_request({
-        Url = userUrl,
-        Method = "PUT",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = initData
-    })
 end
 
 local function checkOut()
@@ -126,7 +115,7 @@ local SOUND_URLS = {
 local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json"
 
 -- ==========================================
--- 3. BLACKLIST CHECK (MANUAL BAN SUPPORT)
+-- 3. BLACKLIST CHECK ON STARTUP
 -- ==========================================
 local isUserBlacklisted = false
 local banTimeText = ""
@@ -140,21 +129,15 @@ if http_request then
     if blacklistCheck and blacklistCheck.StatusCode == 200 and blacklistCheck.Body ~= "null" then
         local banData = HttpService:JSONDecode(blacklistCheck.Body)
         if banData then
-            if type(banData) == "table" then
-                if banData.expires == -1 or banData.expires > os.time() then
-                    isUserBlacklisted = true
-                    banTimeText = formatRemainingTime(banData.expires)
-                else
-                    -- Ban expired, remove them from Firebase
-                    http_request({
-                        Url = BASE_URL .. "blacklist/" .. tostring(LocalPlayer.UserId) .. ".json",
-                        Method = "DELETE"
-                    })
-                end
-            else
-                -- Handles manual string or boolean bans typed directly in Firebase
+            if banData.expires == -1 or banData.expires > os.time() then
                 isUserBlacklisted = true
-                banTimeText = "Permanent"
+                banTimeText = formatRemainingTime(banData.expires)
+            else
+                -- Ban expired, remove them from Firebase
+                http_request({
+                    Url = BASE_URL .. "blacklist/" .. tostring(LocalPlayer.UserId) .. ".json",
+                    Method = "DELETE"
+                })
             end
         end
     end
@@ -1332,6 +1315,7 @@ if IsAdmin(LocalPlayer.UserId) then
     AdminBody.BackgroundTransparency = 1
     AdminBody.Parent = AdminFrame
     
+    -- Command List Section (Left)
     local LeftPanel = Instance.new("Frame")
     LeftPanel.Size = UDim2.new(0.48, 0, 1, -55)
     LeftPanel.Position = UDim2.new(0, 0, 0, 0)
@@ -1379,8 +1363,8 @@ if IsAdmin(LocalPlayer.UserId) then
         "/Kill [name/all]",
         "/Kick [name/all]",
         "/Bring [name/all]",
-        "/ban [username] [reason] [duration]",
-        "/unban [username]"
+        "/ban [name] [reason] [duration]",
+        "/unban [name]"
     }
 
     for _, cmdStr in ipairs(cmds) do
@@ -1397,6 +1381,7 @@ if IsAdmin(LocalPlayer.UserId) then
         createStroke(cLbl, COLORS.Border, 1, 0.5)
     end
 
+    -- Active Users Section (Right)
     local RightPanel = Instance.new("Frame")
     RightPanel.Size = UDim2.new(0.48, 0, 1, -55)
     RightPanel.Position = UDim2.new(0.52, 0, 0, 0)
@@ -1440,6 +1425,7 @@ if IsAdmin(LocalPlayer.UserId) then
         PlayersScroll.CanvasSize = UDim2.new(0, 0, 0, PLayout.AbsoluteContentSize.Y + 10)
     end)
 
+    -- Command Input Field (Bottom)
     AdminCodeInput = Instance.new("TextBox")
     AdminCodeInput.Size = UDim2.new(1, 0, 0, 45)
     AdminCodeInput.Position = UDim2.new(0, 0, 1, -45)
@@ -1476,7 +1462,7 @@ if IsAdmin(LocalPlayer.UserId) then
     end)
 end
 
--- ### CHAT COMMAND LISTENER ###
+-- ### COMMAND LISTENER (All Users) ###
 local function HandleAdminCommand(speaker, message)
     if not IsAdmin(speaker.UserId) then return end
     
@@ -1484,71 +1470,96 @@ local function HandleAdminCommand(speaker, message)
     local cmd = string.lower(args[1])
     local targetStr = args[2]
 
-    -- GLOBAL HTTP ACTIONS: Only trigger if the LocalPlayer is the Admin speaking 
-    -- (Prevents massive HTTP spam if multiple users are running the hub)
-    if speaker == LocalPlayer then
-        if cmd == "/ban" then
-            local targetUser = args[2]
-            if not targetUser then return end
-            
-            local durationStr = args[#args]
-            local reasonArgs = {}
-            for i = 3, #args - 1 do
-                table.insert(reasonArgs, args[i])
+    -- Format: /ban [username] [reason] [duration]
+    if cmd == "/ban" then
+        local targetName = args[2]
+        if not targetName then return end
+        
+        local durationStr = args[#args]
+        local reasonArgs = {}
+        
+        -- Loop between username and duration to catch multi-word reasons
+        for i = 3, #args - 1 do
+            table.insert(reasonArgs, args[i])
+        end
+        
+        local reasonStr = table.concat(reasonArgs, " ")
+        if reasonStr == "" then reasonStr = "Banned via Admin Panel" end
+        
+        -- Resolve username to userid
+        local targetUserId
+        for _, p in ipairs(Players:GetPlayers()) do
+            if string.lower(p.Name) == string.lower(targetName) or string.lower(p.DisplayName) == string.lower(targetName) then
+                targetUserId = p.UserId
+                break
             end
-            local reasonStr = table.concat(reasonArgs, " ")
-            if reasonStr == "" then reasonStr = "Banned via Admin Panel" end
-            
-            local targetUserId
-            pcall(function() targetUserId = Players:GetUserIdFromNameAsync(targetUser) end)
-            if not targetUserId then 
-                print("AN Hub: Failed to find UserId for " .. tostring(targetUser))
-                return 
-            end
-            
+        end
+        
+        -- Fallback to Roblox API if player is not in the server
+        if not targetUserId then
+            pcall(function()
+                targetUserId = Players:GetUserIdFromNameAsync(targetName)
+            end)
+        end
+        
+        if targetUserId then
             local length = parseDuration(durationStr)
             local expireTime = (length == -1) and -1 or (os.time() + length)
             local payload = HttpService:JSONEncode({
                 expires = expireTime,
                 banned_by = speaker.Name,
-                reason = reasonStr
+                reason = reasonStr,
+                username = targetName
             })
             
             task.spawn(function()
                 if http_request then
                     http_request({
-                        Url = BASE_URL .. "blacklist/" .. tostring(targetUserId) .. ".json",
+                        Url = BASE_URL .. "blacklist/" .. targetUserId .. ".json",
                         Method = "PUT",
                         Headers = {["Content-Type"] = "application/json"},
                         Body = payload
                     })
-                    print("AN Hub: Successfully banned " .. targetUser .. " (" .. targetUserId .. ") | Duration: " .. durationStr)
+                    print("AN Hub: Successfully banned User ID " .. targetUserId)
                 end
             end)
-            return
             
-        elseif cmd == "/unban" then
-            local targetUser = args[2]
-            if not targetUser then return end
-            
-            local targetUserId
-            pcall(function() targetUserId = Players:GetUserIdFromNameAsync(targetUser) end)
-            if not targetUserId then return end
-            
+            -- Kick immediately if in the current server
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.UserId == targetUserId then
+                    p:Kick("You have been banned. Reason: " .. reasonStr)
+                end
+            end
+        else
+            warn("AN Hub: Could not resolve username to UserId.")
+        end
+        return
+    end
+
+    -- Format: /unban [username]
+    if cmd == "/unban" then
+        local targetName = args[2]
+        if not targetName then return end
+        
+        local targetUserId
+        pcall(function()
+            targetUserId = Players:GetUserIdFromNameAsync(targetName)
+        end)
+        
+        if targetUserId then
             task.spawn(function()
                 if http_request then
                     http_request({
-                        Url = BASE_URL .. "blacklist/" .. tostring(targetUserId) .. ".json",
+                        Url = BASE_URL .. "blacklist/" .. targetUserId .. ".json",
                         Method = "DELETE"
                     })
-                    print("AN Hub: Unbanned " .. targetUser)
+                    print("AN Hub: Successfully unbanned User ID " .. targetUserId)
                 end
             end)
-            return
         end
+        return
     end
     
-    -- IN-GAME TARGETED ACTIONS: (Every client checks if they are the target)
     if targetStr then
         local myName = string.lower(LocalPlayer.Name)
         local myDisplayName = string.lower(LocalPlayer.DisplayName)
@@ -2388,7 +2399,7 @@ local function applyOverheadTag(player)
 end
 
 -- ==========================================
--- 4. BACKGROUND RADAR (CLEANUP ADDED)
+-- 4. BACKGROUND RADAR
 -- ==========================================
 task.spawn(function()
     while task.wait(5) do
@@ -2401,24 +2412,15 @@ task.spawn(function()
             if response and response.StatusCode == 200 and response.Body ~= "null" then
                 local activeUsers = HttpService:JSONDecode(response.Body)
                 local userNames = {}
-                FirebaseActiveUsers = {}
+                local currentTime = os.time()
                 
+                FirebaseActiveUsers = {}
                 if activeUsers then
                     for userIdStr, info in pairs(activeUsers) do
-                        -- Only consider users who have pinged within the last 60 seconds
-                        if info.timestamp and (os.time() - info.timestamp) <= 60 then
+                        -- Only add if their heartbeat is active (within the last 60 seconds)
+                        if info.timestamp and (currentTime - info.timestamp) <= 60 then
                             FirebaseActiveUsers[userIdStr] = info
                             table.insert(userNames, info.username)
-                        else
-                            -- Automatically wipe stale instances to keep DB clean
-                            task.spawn(function()
-                                pcall(function()
-                                    http_request({
-                                        Url = BASE_URL .. "active_users/" .. JobId .. "/" .. userIdStr .. ".json",
-                                        Method = "DELETE"
-                                    })
-                                end)
-                            end)
                         end
                     end
                     
