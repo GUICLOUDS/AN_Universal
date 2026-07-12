@@ -16,10 +16,6 @@ local http_request = request or http_request or (syn and syn.request)
 
 local CREATOR_ID = 1494561843
 local CO_FOUNDER_ID = 0
-
--- ==========================================
--- 1. HELPER FUNCTIONS
--- ==========================================
 local function IsAdmin(userId)
     return userId == CREATOR_ID or userId == CO_FOUNDER_ID
 end
@@ -53,13 +49,8 @@ local function formatRemainingTime(expiresTimestamp)
     end
 end
 
--- ==========================================
--- 2. FIREBASE NETWORKING
--- ==========================================
 local function checkIn()
     if not http_request then return end
-    
-    -- Heartbeat loop to keep active session fresh and prevent "ghost" nametags on rejoin
     task.spawn(function()
         while true do
             local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
@@ -75,7 +66,7 @@ local function checkIn()
                 Body = data
             })
             
-            task.wait(30) -- Send heartbeat every 30 seconds
+            task.wait(30)
         end
     end)
 end
@@ -95,7 +86,6 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- File Setup
 pcall(function()
     if makefolder and isfolder and not isfolder("AN") then
         makefolder("AN")
@@ -113,10 +103,6 @@ local SOUND_URLS = {
 }
 
 local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json"
-
--- ==========================================
--- 3. BLACKLIST CHECK ON STARTUP
--- ==========================================
 local isUserBlacklisted = false
 local banTimeText = ""
 
@@ -133,7 +119,6 @@ if http_request then
                 isUserBlacklisted = true
                 banTimeText = formatRemainingTime(banData.expires)
             else
-                -- Ban expired, remove them from Firebase
                 http_request({
                     Url = BASE_URL .. "blacklist/" .. tostring(LocalPlayer.UserId) .. ".json",
                     Method = "DELETE"
@@ -2398,9 +2383,6 @@ local function applyOverheadTag(player)
     end
 end
 
--- ==========================================
--- 4. BACKGROUND RADAR
--- ==========================================
 task.spawn(function()
     while task.wait(5) do
         if http_request then
@@ -2558,9 +2540,6 @@ updateDynamicThemeColors(CurrentThemeColor)
 playIntroAnimation()
 
 if isUserBlacklisted then
-    -- ==========================================
-    -- SUSPENDED UI LOGIC
-    -- ==========================================
     warn("AN Hub: Access Denied. Time Remaining: " .. banTimeText)
     
     MenuFrame:Destroy()
@@ -2594,9 +2573,7 @@ if isUserBlacklisted then
         ScreenGui:Destroy()
     end)
 else
-    -- ==========================================
-    -- INITIALIZE HUB (If not banned)
-    -- ==========================================
+    
     checkIn()
     routeToView("menu")
     updateTabLine(MoviesTab)
