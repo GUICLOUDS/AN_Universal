@@ -1,3 +1,8 @@
+local IMAGE_URLS = {
+    IntroLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled230_20260713073832.png",
+    PillLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/1000043901.png"
+}
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
@@ -253,12 +258,12 @@ end)
 
 local CurrentThemeColor = Color3.fromHex(CurrentThemeHex)
 
-local function LoadImageAsync(imageLabel, url)
+local function LoadImageAsync(imageLabel, url, skipFade)
     if not url or url == "" then return end
-    imageLabel.ImageTransparency = 1
+    if not skipFade then imageLabel.ImageTransparency = 1 end
     if not (url:find("^http://") or url:find("^https://")) then
         imageLabel.Image = url
-        TweenService:Create(imageLabel, TweenInfo.new(0.35), {ImageTransparency = 0}):Play()
+        if not skipFade then TweenService:Create(imageLabel, TweenInfo.new(0.35), {ImageTransparency = 0}):Play() end
         return
     end
 
@@ -277,7 +282,7 @@ local function LoadImageAsync(imageLabel, url)
 
         if isfile(filePath) then
             imageLabel.Image = getAsset(filePath)
-            TweenService:Create(imageLabel, TweenInfo.new(0.4), {ImageTransparency = 0}):Play()
+            if not skipFade then TweenService:Create(imageLabel, TweenInfo.new(0.4), {ImageTransparency = 0}):Play() end
         end
     end)
 end
@@ -509,18 +514,15 @@ IntroFrame.ZIndex = 50
 IntroFrame.Parent = MainFrame
 createCorner(IntroFrame, 10)
 
-local LoadingN = Instance.new("TextLabel")
+local LoadingN = Instance.new("ImageLabel")
 LoadingN.Name = "LoadingAN"
 LoadingN.Size = UDim2.new(0, 100, 0, 100)
 LoadingN.Position = UDim2.new(0.5, -50, 0.45, -50)
 LoadingN.BackgroundTransparency = 1
-LoadingN.Text = "AN"
-LoadingN.Font = FONTS.Heavy
-LoadingN.TextSize = 130
-LoadingN.TextColor3 = COLORS.BrandRed
-LoadingN.TextTransparency = 1
+LoadingN.ImageTransparency = 1
 LoadingN.ZIndex = 51
 LoadingN.Parent = IntroFrame
+LoadImageAsync(LoadingN, IMAGE_URLS.IntroLogo, true)
 
 local LoadBar = Instance.new("Frame")
 LoadBar.Name = "LoadBar"
@@ -539,7 +541,7 @@ local function playIntroAnimation()
     TweenService:Create(LoadingN, TweenInfo.new(0.8, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
         Size = UDim2.new(0, 100, 0, 100),
         Position = UDim2.new(0.5, -50, 0.45, -50),
-        TextTransparency = 0
+        ImageTransparency = 0
     }):Play()
 
     task.wait(0.3)
@@ -553,7 +555,7 @@ local function playIntroAnimation()
     TweenService:Create(LoadingN, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
         Size = UDim2.new(0, 400, 0, 400),
         Position = UDim2.new(0.5, -200, 0.45, -200),
-        TextTransparency = 1
+        ImageTransparency = 1
     }):Play()
 
     TweenService:Create(LoadBar, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
@@ -711,16 +713,12 @@ end)
 
 makeDraggable(HeaderBar, MainFrame)
 
-local MinimizedPill = Instance.new("TextButton")
+local MinimizedPill = Instance.new("ImageButton")
 MinimizedPill.Name = "MinimizedPill"
 MinimizedPill.Size = UDim2.new(0, 56, 0, 56)
 MinimizedPill.Position = UDim2.new(0.5, -28, 0.5, -28)
 MinimizedPill.BackgroundColor3 = COLORS.DarkMid
 MinimizedPill.BorderSizePixel = 0
-MinimizedPill.Text = "N"
-MinimizedPill.Font = FONTS.Heavy
-MinimizedPill.TextSize = 26
-MinimizedPill.TextColor3 = COLORS.BrandRed
 MinimizedPill.AutoButtonColor = false
 MinimizedPill.Visible = false
 MinimizedPill.ZIndex = 100
@@ -729,6 +727,7 @@ createCorner(MinimizedPill, 28)
 local MinimizedStroke = createStroke(MinimizedPill, COLORS.BrandRed, 2, 0.1)
 BindInteractionSounds(MinimizedPill)
 makeDraggable(MinimizedPill, MinimizedPill)
+LoadImageAsync(MinimizedPill, IMAGE_URLS.PillLogo)
 
 local isMinimized = false
 local cachedWindowPos = MainFrame.Position
@@ -1240,19 +1239,26 @@ CreditsContent.Position = UDim2.new(0, 18, 0, 12)
 CreditsContent.BackgroundTransparency = 1
 CreditsContent.Parent = CreditsFrame
 
+local CreditsLogo = Instance.new("ImageLabel")
+CreditsLogo.Size = UDim2.new(0, 120, 0, 120)
+CreditsLogo.Position = UDim2.new(0.5, -60, 0.05, 0)
+CreditsLogo.BackgroundTransparency = 1
+CreditsLogo.Parent = CreditsContent
+LoadImageAsync(CreditsLogo, IMAGE_URLS.IntroLogo)
+
 local CreditsBigN = Instance.new("TextLabel")
-CreditsBigN.Size = UDim2.new(1, 0, 0, 100)
-CreditsBigN.Position = UDim2.new(0, 0, 0.15, 0)
+CreditsBigN.Size = UDim2.new(1, 0, 0, 60)
+CreditsBigN.Position = UDim2.new(0, 0, 0.05, 120)
 CreditsBigN.BackgroundTransparency = 1
 CreditsBigN.Text = "AN UNIVERSAL"
 CreditsBigN.TextColor3 = COLORS.BrandRed
 CreditsBigN.Font = FONTS.Heavy
-CreditsBigN.TextSize = 64
+CreditsBigN.TextSize = 48
 CreditsBigN.Parent = CreditsContent
 
 local AuthorTitle = Instance.new("TextLabel")
 AuthorTitle.Size = UDim2.new(1, 0, 0, 30)
-AuthorTitle.Position = UDim2.new(0, 0, 0.15, 110)
+AuthorTitle.Position = UDim2.new(0, 0, 0.05, 180)
 AuthorTitle.BackgroundTransparency = 1
 AuthorTitle.Text = "Created by: noli_0"
 AuthorTitle.TextColor3 = COLORS.White
@@ -1262,7 +1268,7 @@ AuthorTitle.Parent = CreditsContent
 
 local CoFounderTitle = Instance.new("TextLabel")
 CoFounderTitle.Size = UDim2.new(1, 0, 0, 30)
-CoFounderTitle.Position = UDim2.new(0, 0, 0.15, 140)
+CoFounderTitle.Position = UDim2.new(0, 0, 0.05, 210)
 CoFounderTitle.BackgroundTransparency = 1
 CoFounderTitle.Text = "Co-Founder: thats_carvs"
 CoFounderTitle.TextColor3 = COLORS.White
@@ -1272,7 +1278,7 @@ CoFounderTitle.Parent = CreditsContent
 
 local CreditsDescription = Instance.new("TextLabel")
 CreditsDescription.Size = UDim2.new(1, 0, 0, 40)
-CreditsDescription.Position = UDim2.new(0, 0, 0.15, 180)
+CreditsDescription.Position = UDim2.new(0, 0, 0.05, 250)
 CreditsDescription.BackgroundTransparency = 1
 CreditsDescription.Text = "Everything is created with blood sweat and tears twim"
 CreditsDescription.TextColor3 = COLORS.GreyMuted
@@ -1927,7 +1933,6 @@ local function updateDynamicThemeColors(newColor)
     COLORS.BrandRed = newColor
     BrandLogo.TextColor3 = newColor
     NavIndicator.BackgroundColor3 = newColor
-    MinimizedPill.TextColor3 = newColor
     MinimizedStroke.Color = newColor
     PlayBtn.BackgroundColor3 = newColor
     ExecActionBtn.BackgroundColor3 = newColor
