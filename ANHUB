@@ -819,7 +819,7 @@ GenreLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     GenreDropdown.CanvasSize = UDim2.new(0, 0, 0, GenreLayout.AbsoluteContentSize.Y)
 end)
 
-local GenresList = {"All", "My List", "Action", "Documentary", "Sci-Fi", "Insta Move"}
+local GenresList = {"All", "My List", "Action", "Comedy", "Horror", "Insta Move", "Explicit"}
 for _, genre in ipairs(GenresList) do
     local gBtn = Instance.new("TextButton")
     gBtn.Size = UDim2.new(1, -6, 0, 26)
