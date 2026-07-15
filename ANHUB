@@ -19,23 +19,10 @@ if JobId == "" then JobId = "TestServer" end -- Fallback for Studio testing
 local BASE_URL = "https://anuni-21a0e-default-rtdb.firebaseio.com/"
 local http_request = request or http_request or (syn and syn.request)
 
--- ### RANKING SYSTEM ###
 local CREATOR_ID = 1494561843
 local CO_FOUNDER_ID = 11084026865
-local ADMIN_IDS = {
-    -- ADD ADMIN USER IDs HERE (Separate with commas, e.g., 1234567, 7654321)
-    0000000000, 
-}
-
-local function GetRank(userId)
-    if userId == CREATOR_ID then return 4 end -- Founder
-    if userId == CO_FOUNDER_ID then return 3 end -- Co-Founder
-    if table.find(ADMIN_IDS, userId) then return 2 end -- Admin
-    return 1 -- User
-end
-
 local function IsAdmin(userId)
-    return GetRank(userId) >= 2
+    return userId == CREATOR_ID or userId == CO_FOUNDER_ID
 end
 
 local function parseDuration(durationStr)
@@ -1368,16 +1355,7 @@ if IsAdmin(LocalPlayer.UserId) then
         "/Kick [name/all]",
         "/Bring [name/all]",
         "/ban [name] [reason] [duration]",
-        "/unban [name]",
-        "/Fling [name/all]",
-        "/Loopkill [name/all]",
-        "/Unloopkill [name/all]",
-        "/Explode [name/all]",
-        "/Spin [name/all]",
-        "/Unspin [name/all]",
-        "/Freeze [name/all]",
-        "/Unfreeze [name/all]",
-        "/Jump [name/all]"
+        "/unban [name]"
     }
 
     for _, cmdStr in ipairs(cmds) do
@@ -1475,203 +1453,6 @@ if IsAdmin(LocalPlayer.UserId) then
     end)
 end
 
--- ### PERMISSION REQUEST UI ###
-local function ShowCommandRequest(speaker, cmd, executeCallback)
-    if ScreenGui:FindFirstChild("AdminRequestUI") then
-        ScreenGui.AdminRequestUI:Destroy()
-    end
-
-    local ReqFrame = Instance.new("Frame")
-    ReqFrame.Name = "AdminRequestUI"
-    ReqFrame.Size = UDim2.new(0, 320, 0, 110)
-    ReqFrame.Position = UDim2.new(0.5, -160, 0.5, -55)
-    ReqFrame.BackgroundColor3 = COLORS.DarkBack
-    ReqFrame.BorderSizePixel = 0
-    ReqFrame.ZIndex = 250
-    ReqFrame.Parent = ScreenGui
-    ReqFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    createCorner(ReqFrame, 8)
-    createStroke(ReqFrame, COLORS.Border, 2)
-    ReqFrame.Scale = 0
-    
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -30, 0, 30)
-    Title.Position = UDim2.new(0, 15, 0, 5)
-    Title.BackgroundTransparency = 1
-    Title.Text = "COMMAND PERMISSION"
-    Title.TextColor3 = COLORS.BrandRed
-    Title.Font = FONTS.Heavy
-    Title.TextSize = 14
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.ZIndex = 251
-    Title.Parent = ReqFrame
-    
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 24, 0, 24)
-    CloseBtn.Position = UDim2.new(1, -30, 0, 8)
-    CloseBtn.BackgroundTransparency = 1
-    CloseBtn.Text = "X"
-    CloseBtn.TextColor3 = COLORS.GreyLight
-    CloseBtn.Font = FONTS.Heavy
-    CloseBtn.TextSize = 14
-    CloseBtn.ZIndex = 252
-    CloseBtn.Parent = ReqFrame
-    
-    local Body = Instance.new("TextLabel")
-    Body.Size = UDim2.new(1, -30, 0, 30)
-    Body.Position = UDim2.new(0, 15, 0, 35)
-    Body.BackgroundTransparency = 1
-    Body.Text = speaker.DisplayName .. " (@" .. speaker.Name .. ") requested to use " .. cmd .. " on you."
-    Body.TextColor3 = COLORS.White
-    Body.Font = FONTS.Medium
-    Body.TextSize = 13
-    Body.TextWrapped = true
-    Body.TextXAlignment = Enum.TextXAlignment.Left
-    Body.ZIndex = 251
-    Body.Parent = ReqFrame
-
-    local YesBtn = Instance.new("TextButton")
-    YesBtn.Size = UDim2.new(0.45, 0, 0, 30)
-    YesBtn.Position = UDim2.new(0, 15, 0, 70)
-    YesBtn.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
-    YesBtn.Text = "Allow"
-    YesBtn.TextColor3 = COLORS.White
-    YesBtn.Font = FONTS.Bold
-    YesBtn.TextSize = 13
-    YesBtn.ZIndex = 251
-    YesBtn.Parent = ReqFrame
-    createCorner(YesBtn, 4)
-
-    local NoBtn = Instance.new("TextButton")
-    NoBtn.Size = UDim2.new(0.45, 0, 0, 30)
-    NoBtn.Position = UDim2.new(1, -15, 0, 70)
-    NoBtn.AnchorPoint = Vector2.new(1, 0)
-    NoBtn.BackgroundColor3 = COLORS.BrandRed
-    NoBtn.Text = "Deny"
-    NoBtn.TextColor3 = COLORS.White
-    NoBtn.Font = FONTS.Bold
-    NoBtn.TextSize = 13
-    NoBtn.ZIndex = 251
-    NoBtn.Parent = ReqFrame
-    createCorner(NoBtn, 4)
-    
-    local TimeBar = Instance.new("Frame")
-    TimeBar.Size = UDim2.new(1, 0, 0, 3)
-    TimeBar.Position = UDim2.new(0, 0, 1, -3)
-    TimeBar.BackgroundColor3 = COLORS.BrandRed
-    TimeBar.BorderSizePixel = 0
-    TimeBar.ZIndex = 252
-    TimeBar.Parent = ReqFrame
-    createCorner(TimeBar, 1)
-
-    PlaySoundAsync(SOUND_URLS.Intro, "Intro", 0.5)
-    
-    local popTween = TweenService:Create(ReqFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
-    ReqFrame.Size = UDim2.new(0, 320, 0, 110)
-    popTween:Play()
-    
-    local isResponded = false
-    
-    local function cleanup()
-        if not ReqFrame then return end
-        local outTween = TweenService:Create(ReqFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1})
-        outTween:Play()
-        outTween.Completed:Wait()
-        if ReqFrame then ReqFrame:Destroy() end
-    end
-    
-    YesBtn.MouseButton1Click:Connect(function()
-        if isResponded then return end
-        isResponded = true
-        executeCallback(true)
-        cleanup()
-    end)
-    
-    NoBtn.MouseButton1Click:Connect(function()
-        if isResponded then return end
-        isResponded = true
-        executeCallback(false)
-        cleanup()
-    end)
-    
-    CloseBtn.MouseButton1Click:Connect(function()
-        if isResponded then return end
-        isResponded = true
-        executeCallback(false)
-        cleanup()
-    end)
-
-    local timerTween = TweenService:Create(TimeBar, TweenInfo.new(15, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 3)})
-    timerTween:Play()
-    timerTween.Completed:Connect(function()
-        if not isResponded then
-            isResponded = true
-            executeCallback(false)
-            cleanup()
-        end
-    end)
-end
-
--- Tracks continuous commands
-local ActionLoops = { LoopKill = false }
-
-local function executeAction(cmd, speaker)
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChild("Humanoid")
-
-    if cmd == "/kill" then
-        if hum then hum.Health = 0 end
-    elseif cmd == "/kick" then
-        LocalPlayer:Kick("You have been kicked by an AN Administrator.")
-    elseif cmd == "/bring" then
-        if speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart") and hrp then
-            hrp.CFrame = speaker.Character.HumanoidRootPart.CFrame
-        end
-    elseif cmd == "/fling" then
-        if hrp then
-            hrp.AssemblyLinearVelocity = Vector3.new(50000, 50000, 50000)
-            hrp.AssemblyAngularVelocity = Vector3.new(50000, 50000, 50000)
-        end
-    elseif cmd == "/loopkill" then
-        ActionLoops.LoopKill = true
-    elseif cmd == "/unloopkill" then
-        ActionLoops.LoopKill = false
-    elseif cmd == "/explode" then
-        if hrp then
-            local ex = Instance.new("Explosion")
-            ex.Position = hrp.Position
-            ex.Parent = workspace
-        end
-    elseif cmd == "/spin" then
-        if hrp then
-            if not hrp:FindFirstChild("AN_Spin") then
-                local spin = Instance.new("BodyAngularVelocity")
-                spin.Name = "AN_Spin"
-                spin.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                spin.AngularVelocity = Vector3.new(0, 50, 0)
-                spin.Parent = hrp
-            end
-        end
-    elseif cmd == "/unspin" then
-        if hrp and hrp:FindFirstChild("AN_Spin") then
-            hrp.AN_Spin:Destroy()
-        end
-    elseif cmd == "/freeze" then
-        if hrp then hrp.Anchored = true end
-    elseif cmd == "/unfreeze" then
-        if hrp then hrp.Anchored = false end
-    elseif cmd == "/jump" then
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end
-
-RunService.Heartbeat:Connect(function()
-    if ActionLoops.LoopKill and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.Health = 0
-    end
-end)
-
 -- ### COMMAND LISTENER (All Users) ###
 local function HandleAdminCommand(speaker, message)
     if not IsAdmin(speaker.UserId) then return end
@@ -1680,19 +1461,23 @@ local function HandleAdminCommand(speaker, message)
     local cmd = string.lower(args[1])
     local targetStr = args[2]
 
-    -- Banning Logic (Only fires HTTP Request if YOU are the speaker)
-    if cmd == "/ban" and speaker == LocalPlayer then
+    -- Format: /ban [username] [reason] [duration]
+    if cmd == "/ban" then
         local targetName = args[2]
         if not targetName then return end
         
         local durationStr = args[#args]
         local reasonArgs = {}
         
-        for i = 3, #args - 1 do table.insert(reasonArgs, args[i]) end
+        -- Loop between username and duration to catch multi-word reasons
+        for i = 3, #args - 1 do
+            table.insert(reasonArgs, args[i])
+        end
         
         local reasonStr = table.concat(reasonArgs, " ")
         if reasonStr == "" then reasonStr = "Banned via Admin Panel" end
         
+        -- Resolve username to userid
         local targetUserId
         for _, p in ipairs(Players:GetPlayers()) do
             if string.lower(p.Name) == string.lower(targetName) or string.lower(p.DisplayName) == string.lower(targetName) then
@@ -1701,14 +1486,14 @@ local function HandleAdminCommand(speaker, message)
             end
         end
         
-        if not targetUserId then pcall(function() targetUserId = Players:GetUserIdFromNameAsync(targetName) end) end
+        -- Fallback to Roblox API if player is not in the server
+        if not targetUserId then
+            pcall(function()
+                targetUserId = Players:GetUserIdFromNameAsync(targetName)
+            end)
+        end
         
         if targetUserId then
-            if GetRank(targetUserId) >= GetRank(speaker.UserId) then
-                ShowNetflixNotification("Access Denied", "You cannot ban a user of equal or higher rank.")
-                return
-            end
-            
             local length = parseDuration(durationStr)
             local expireTime = (length == -1) and -1 or (os.time() + length)
             local payload = HttpService:JSONEncode({
@@ -1730,8 +1515,11 @@ local function HandleAdminCommand(speaker, message)
                 end
             end)
             
+            -- Kick immediately if in the current server
             for _, p in ipairs(Players:GetPlayers()) do
-                if p.UserId == targetUserId then p:Kick("You have been banned.\nReason: " .. reasonStr) end
+                if p.UserId == targetUserId then
+                    p:Kick("You have been banned. Reason: " .. reasonStr)
+                end
             end
         else
             warn("AN Hub: Could not resolve username to UserId.")
@@ -1739,12 +1527,15 @@ local function HandleAdminCommand(speaker, message)
         return
     end
 
-    if cmd == "/unban" and speaker == LocalPlayer then
+    -- Format: /unban [username]
+    if cmd == "/unban" then
         local targetName = args[2]
         if not targetName then return end
         
         local targetUserId
-        pcall(function() targetUserId = Players:GetUserIdFromNameAsync(targetName) end)
+        pcall(function()
+            targetUserId = Players:GetUserIdFromNameAsync(targetName)
+        end)
         
         if targetUserId then
             task.spawn(function()
@@ -1765,20 +1556,16 @@ local function HandleAdminCommand(speaker, message)
         local myDisplayName = string.lower(LocalPlayer.DisplayName)
         targetStr = string.lower(targetStr)
         
-        -- Target Action Execution Layer (Runs on the targeted user's client)
         if string.sub(myName, 1, #targetStr) == targetStr or string.sub(myDisplayName, 1, #targetStr) == targetStr or targetStr == "all" then
-            
-            local validCommands = {"/kill", "/kick", "/bring", "/fling", "/loopkill", "/unloopkill", "/explode", "/spin", "/unspin", "/freeze", "/unfreeze", "/jump"}
-            if table.find(validCommands, cmd) then
-                local myRank = GetRank(LocalPlayer.UserId)
-                local speakerRank = GetRank(speaker.UserId)
-                
-                if myRank > speakerRank then
-                    ShowCommandRequest(speaker, cmd, function(approved)
-                        if approved then executeAction(cmd, speaker) end
-                    end)
-                else
-                    executeAction(cmd, speaker)
+            if cmd == "/kill" then
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.Health = 0
+                end
+            elseif cmd == "/kick" then
+                LocalPlayer:Kick("You have been kicked by an AN Administrator.")
+            elseif cmd == "/bring" then
+                if speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = speaker.Character.HumanoidRootPart.CFrame
                 end
             end
         end
@@ -1823,7 +1610,6 @@ local function createSettingRow(labelText)
     row.Parent = SettingsScroll
     createCorner(row, 6)
     local lbl = Instance.new("TextLabel")
-    
     lbl.Size = UDim2.new(0.4, 0, 1, 0)
     lbl.Position = UDim2.new(0, 16, 0, 0)
     lbl.BackgroundTransparency = 1
@@ -2579,12 +2365,11 @@ local function applyOverheadTag(player)
     textLabel.Parent = frame
 
     local role = "AN Hub User"
-    local rank = GetRank(player.UserId)
-    
-    if rank == 4 then 
+    if player.UserId == CREATOR_ID then 
         role = "AN Founder" 
-    elseif rank == 3 then
+    elseif player.UserId == CO_FOUNDER_ID then
         role = "AN Co-Founder"
+        
         local gradient = Instance.new("UIGradient")
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
@@ -2594,8 +2379,6 @@ local function applyOverheadTag(player)
         gradient.Rotation = 45
         gradient.Parent = textLabel
         ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Gradient = gradient }
-    elseif rank == 2 then
-        role = "AN Admin"
     end
     
     textLabel.Text = role
@@ -2621,6 +2404,7 @@ task.spawn(function()
                 FirebaseActiveUsers = {}
                 if activeUsers then
                     for userIdStr, info in pairs(activeUsers) do
+                        -- Only add if their heartbeat is active (within the last 60 seconds)
                         if info.timestamp and (currentTime - info.timestamp) <= 60 then
                             FirebaseActiveUsers[userIdStr] = info
                             table.insert(userNames, info.username)
@@ -2662,6 +2446,7 @@ task.spawn(function()
                         pBtn.Parent = PlayersScroll
                         createCorner(pBtn, 4)
                         createStroke(pBtn, COLORS.Border, 1, 0.5)
+            
                         BindInteractionSounds(pBtn)
                         
                         pBtn.MouseEnter:Connect(function()
@@ -2670,7 +2455,7 @@ task.spawn(function()
                         pBtn.MouseLeave:Connect(function()
                             TweenService:Create(pBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(20, 20, 20), TextColor3 = COLORS.GreyLight}):Play()
                         end)
-             
+            
                         pBtn.MouseButton1Click:Connect(function()
                             if setclipboard then
                                 setclipboard(userIdStr)
@@ -2733,25 +2518,17 @@ RunService.Heartbeat:Connect(function()
     for player, data in pairs(ActiveTags) do
         pcall(function()
             if data.Gui and data.TextLabel then
-                local rank = GetRank(data.UserId)
-                if rank == 4 then -- Founder
+                if data.UserId == CREATOR_ID then
                     local formula = (math.sin(clock * 4.5) + 1) / 2
                     local customRed = Color3.fromRGB(229, 9, 20)
                     local customBlack = Color3.fromRGB(15, 15, 15)
                     local lerpedColor = customBlack:Lerp(customRed, formula)
                     data.TextLabel.TextColor3 = lerpedColor
                     data.Stroke.Color = lerpedColor
-                elseif rank == 3 and data.Gradient then -- Co-Founder
+                elseif data.UserId == CO_FOUNDER_ID and data.Gradient then
                     data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0)
                     data.Stroke.Color = Color3.fromRGB(255, 215, 0)
-                elseif rank == 2 then -- Admin
-                    local formula = (math.sin(clock * 3) + 1) / 2
-                    local purpleNeon = Color3.fromRGB(148, 0, 211)
-                    local dimBase = Color3.fromRGB(30, 0, 50)
-                    local lerpedGlow = dimBase:Lerp(purpleNeon, formula)
-                    data.TextLabel.TextColor3 = lerpedGlow
-                    data.Stroke.Color = lerpedGlow
-                else -- User
+                else
                     local formula = (math.sin(clock * 3) + 1) / 2
                     local neonBase = Color3.fromRGB(0, 220, 255)
                     local dimBase = Color3.fromRGB(0, 60, 80)
@@ -2801,6 +2578,7 @@ if isUserBlacklisted then
         ScreenGui:Destroy()
     end)
 else
+    
     checkIn()
     routeToView("menu")
     updateTabLine(MoviesTab)
