@@ -15,15 +15,30 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local JobId = game.JobId
-if JobId == "" then JobId = "TestServer" end -- Fallback for Studio testing
+if JobId == "" then JobId = "TestServer" end
 local BASE_URL = "https://anuni-21a0e-default-rtdb.firebaseio.com/"
 local http_request = request or http_request or (syn and syn.request)
 
 local CREATOR_ID = 1494561843
 local CO_FOUNDER_ID = 11084026865
-local function IsAdmin(userId)
-    return userId == CREATOR_ID or userId == CO_FOUNDER_ID
+local ADMIN_IDS = {
+    0,
+    0
+}
+
+local function GetUserRank(userId)
+    if userId == CREATOR_ID then return 4 end
+    if userId == CO_FOUNDER_ID then return 3 end
+    if table.find(ADMIN_IDS, userId) then return 2 end
+    return 1
 end
+
+local function IsAdmin(userId)
+    return GetUserRank(userId) >= 2
+end
+
+local LoopKillTargets = {}
+local SpinTargets = {}
 
 local function parseDuration(durationStr)
     if not durationStr or durationStr == "-1" then return -1 end
@@ -448,7 +463,7 @@ local function ShowNetflixNotification(title, desc)
         })
         outTween:Play()
         outTween.Completed:Wait()
-        NotifFrame:Destroy()
+        if NotifFrame then NotifFrame:Destroy() end
     end)
 end
 
@@ -505,36 +520,36 @@ local function makeDraggable(dragHandle, target)
     end)
 end
 
-local IntroFrame = Instance.new("Frame")
-IntroFrame.Name = "IntroFrame"
-IntroFrame.Size = UDim2.new(1, 0, 1, 0)
-IntroFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
-IntroFrame.BorderSizePixel = 0
-IntroFrame.ZIndex = 50
-IntroFrame.Parent = MainFrame
-createCorner(IntroFrame, 10)
+do
+    local IntroFrame = Instance.new("Frame")
+    IntroFrame.Name = "IntroFrame"
+    IntroFrame.Size = UDim2.new(1, 0, 1, 0)
+    IntroFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
+    IntroFrame.BorderSizePixel = 0
+    IntroFrame.ZIndex = 50
+    IntroFrame.Parent = MainFrame
+    createCorner(IntroFrame, 10)
 
-local LoadingN = Instance.new("ImageLabel")
-LoadingN.Name = "LoadingAN"
-LoadingN.Size = UDim2.new(0, 100, 0, 100)
-LoadingN.Position = UDim2.new(0.5, -50, 0.45, -50)
-LoadingN.BackgroundTransparency = 1
-LoadingN.ImageTransparency = 1
-LoadingN.ZIndex = 51
-LoadingN.Parent = IntroFrame
-LoadImageAsync(LoadingN, IMAGE_URLS.IntroLogo, true)
+    local LoadingN = Instance.new("ImageLabel")
+    LoadingN.Name = "LoadingAN"
+    LoadingN.Size = UDim2.new(0, 100, 0, 100)
+    LoadingN.Position = UDim2.new(0.5, -50, 0.45, -50)
+    LoadingN.BackgroundTransparency = 1
+    LoadingN.ImageTransparency = 1
+    LoadingN.ZIndex = 51
+    LoadingN.Parent = IntroFrame
+    LoadImageAsync(LoadingN, IMAGE_URLS.IntroLogo, true)
 
-local LoadBar = Instance.new("Frame")
-LoadBar.Name = "LoadBar"
-LoadBar.Size = UDim2.new(0, 0, 0, 3)
-LoadBar.Position = UDim2.new(0.5, -60, 0.72, 0)
-LoadBar.BackgroundColor3 = COLORS.BrandRed
-LoadBar.BorderSizePixel = 0
-LoadBar.ZIndex = 51
-LoadBar.Parent = IntroFrame
-createCorner(LoadBar, 1.5)
+    local LoadBar = Instance.new("Frame")
+    LoadBar.Name = "LoadBar"
+    LoadBar.Size = UDim2.new(0, 0, 0, 3)
+    LoadBar.Position = UDim2.new(0.5, -60, 0.72, 0)
+    LoadBar.BackgroundColor3 = COLORS.BrandRed
+    LoadBar.BorderSizePixel = 0
+    LoadBar.ZIndex = 51
+    LoadBar.Parent = IntroFrame
+    createCorner(LoadBar, 1.5)
 
-local function playIntroAnimation()
     PlaySoundAsync(SOUND_URLS.Intro, "Intro", 1.2)
     LoadingN.Size = UDim2.new(0, 60, 0, 60)
     LoadingN.Position = UDim2.new(0.5, -30, 0.45, -30)
@@ -545,13 +560,11 @@ local function playIntroAnimation()
     }):Play()
 
     task.wait(0.3)
-
     TweenService:Create(LoadBar, TweenInfo.new(0.9, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
         Size = UDim2.new(0, 120, 0, 3)
     }):Play()
 
     task.wait(1.0)
-
     TweenService:Create(LoadingN, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
         Size = UDim2.new(0, 400, 0, 400),
         Position = UDim2.new(0.5, -200, 0.45, -200),
@@ -567,7 +580,6 @@ local function playIntroAnimation()
     })
     fadeBg:Play()
     fadeBg.Completed:Wait()
-
     IntroFrame:Destroy()
 end
 
@@ -579,13 +591,15 @@ HeaderBar.BorderSizePixel = 0
 HeaderBar.ZIndex = 10
 HeaderBar.Parent = MainFrame
 
-local HeaderBottomCover = Instance.new("Frame")
-HeaderBottomCover.Size = UDim2.new(1, 0, 0, 10)
-HeaderBottomCover.Position = UDim2.new(0, 0, 1, -10)
-HeaderBottomCover.BackgroundColor3 = COLORS.DarkMid
-HeaderBottomCover.BorderSizePixel = 0
-HeaderBottomCover.ZIndex = 10
-HeaderBottomCover.Parent = HeaderBar
+do
+    local HeaderBottomCover = Instance.new("Frame")
+    HeaderBottomCover.Size = UDim2.new(1, 0, 0, 10)
+    HeaderBottomCover.Position = UDim2.new(0, 0, 1, -10)
+    HeaderBottomCover.BackgroundColor3 = COLORS.DarkMid
+    HeaderBottomCover.BorderSizePixel = 0
+    HeaderBottomCover.ZIndex = 10
+    HeaderBottomCover.Parent = HeaderBar
+end
 
 local BrandLogo = Instance.new("TextLabel")
 BrandLogo.Name = "BrandLogo"
@@ -609,12 +623,18 @@ TabNavContainer.ScrollBarThickness = 0
 TabNavContainer.ZIndex = 11
 TabNavContainer.Parent = HeaderBar
 
-local TabNavLayout = Instance.new("UIListLayout")
-TabNavLayout.FillDirection = Enum.FillDirection.Horizontal
-TabNavLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-TabNavLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-TabNavLayout.Padding = UDim.new(0, 14)
-TabNavLayout.Parent = TabNavContainer
+do
+    local TabNavLayout = Instance.new("UIListLayout")
+    TabNavLayout.FillDirection = Enum.FillDirection.Horizontal
+    TabNavLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    TabNavLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    TabNavLayout.Padding = UDim.new(0, 14)
+    TabNavLayout.Parent = TabNavContainer
+
+    TabNavLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabNavContainer.CanvasSize = UDim2.new(0, TabNavLayout.AbsoluteContentSize.X + 20, 0, 0)
+    end)
+end
 
 local NavIndicator = Instance.new("Frame")
 NavIndicator.Name = "NavIndicator"
@@ -645,15 +665,10 @@ local MoviesTab = makeTextTab("Movies", 55)
 local ExecutorTab = makeTextTab("Director's Cut", 100)
 local SettingsTab = makeTextTab("Settings", 65)
 local CreditsTab = makeTextTab("Credits", 55)
-
 local AdminTab
 if IsAdmin(LocalPlayer.UserId) then
     AdminTab = makeTextTab("Admin", 55)
 end
-
-TabNavLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    TabNavContainer.CanvasSize = UDim2.new(0, TabNavLayout.AbsoluteContentSize.X + 20, 0, 0)
-end)
 
 local function updateTabLine(targetTab)
     local absolutePos = targetTab.AbsolutePosition
@@ -674,60 +689,65 @@ local function updateTabLine(targetTab)
     end
 end
 
-local ActionsHolder = Instance.new("Frame")
-ActionsHolder.Name = "ActionsHolder"
-ActionsHolder.Size = UDim2.new(0, 70, 1, 0)
-ActionsHolder.Position = UDim2.new(1, -82, 0, 0)
-ActionsHolder.BackgroundTransparency = 1
-ActionsHolder.ZIndex = 11
-ActionsHolder.Parent = HeaderBar
-
-local ActionsLayout = Instance.new("UIListLayout")
-ActionsLayout.FillDirection = Enum.FillDirection.Horizontal
-ActionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-ActionsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-ActionsLayout.Padding = UDim.new(0, 10)
-ActionsLayout.Parent = ActionsHolder
-
 local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Name = "MinimizeBtn"
-MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
-MinimizeBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-MinimizeBtn.BorderSizePixel = 0
-MinimizeBtn.Text = "—"
-MinimizeBtn.TextColor3 = COLORS.GreyLight
-MinimizeBtn.Font = FONTS.Bold
-MinimizeBtn.TextSize = 12
-MinimizeBtn.AutoButtonColor = false
-MinimizeBtn.ZIndex = 12
-MinimizeBtn.Parent = ActionsHolder
-createCorner(MinimizeBtn, 13)
-BindInteractionSounds(MinimizeBtn)
+do
+    local ActionsHolder = Instance.new("Frame")
+    ActionsHolder.Name = "ActionsHolder"
+    ActionsHolder.Size = UDim2.new(0, 70, 1, 0)
+    ActionsHolder.Position = UDim2.new(1, -82, 0, 0)
+    ActionsHolder.BackgroundTransparency = 1
+    ActionsHolder.ZIndex = 11
+    ActionsHolder.Parent = HeaderBar
 
-MinimizeBtn.MouseEnter:Connect(function()
-    TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(45, 45, 45), TextColor3 = COLORS.White}):Play()
-end)
-MinimizeBtn.MouseLeave:Connect(function()
-    TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(28, 28, 28), TextColor3 = COLORS.GreyLight}):Play()
-end)
+    local ActionsLayout = Instance.new("UIListLayout")
+    ActionsLayout.FillDirection = Enum.FillDirection.Horizontal
+    ActionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    ActionsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    ActionsLayout.Padding = UDim.new(0, 10)
+    ActionsLayout.Parent = ActionsHolder
+
+    MinimizeBtn.Name = "MinimizeBtn"
+    MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
+    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    MinimizeBtn.BorderSizePixel = 0
+    MinimizeBtn.Text = "—"
+    MinimizeBtn.TextColor3 = COLORS.GreyLight
+    MinimizeBtn.Font = FONTS.Bold
+    MinimizeBtn.TextSize = 12
+    MinimizeBtn.AutoButtonColor = false
+    MinimizeBtn.ZIndex = 12
+    MinimizeBtn.Parent = ActionsHolder
+    createCorner(MinimizeBtn, 13)
+    BindInteractionSounds(MinimizeBtn)
+
+    MinimizeBtn.MouseEnter:Connect(function()
+        TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(45, 45, 45), TextColor3 = COLORS.White}):Play()
+    end)
+    MinimizeBtn.MouseLeave:Connect(function()
+        TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(28, 28, 28), TextColor3 = COLORS.GreyLight}):Play()
+    end)
+end
 
 makeDraggable(HeaderBar, MainFrame)
 
 local MinimizedPill = Instance.new("ImageButton")
-MinimizedPill.Name = "MinimizedPill"
-MinimizedPill.Size = UDim2.new(0, 56, 0, 56)
-MinimizedPill.Position = UDim2.new(0.5, -28, 0.5, -28)
-MinimizedPill.BackgroundColor3 = COLORS.DarkMid
-MinimizedPill.BorderSizePixel = 0
-MinimizedPill.AutoButtonColor = false
-MinimizedPill.Visible = false
-MinimizedPill.ZIndex = 100
-MinimizedPill.Parent = ScreenGui
-createCorner(MinimizedPill, 28)
-local MinimizedStroke = createStroke(MinimizedPill, COLORS.BrandRed, 2, 0.1)
-BindInteractionSounds(MinimizedPill)
-makeDraggable(MinimizedPill, MinimizedPill)
-LoadImageAsync(MinimizedPill, IMAGE_URLS.PillLogo)
+local MinimizedStroke
+do
+    MinimizedPill.Name = "MinimizedPill"
+    MinimizedPill.Size = UDim2.new(0, 56, 0, 56)
+    MinimizedPill.Position = UDim2.new(0.5, -28, 0.5, -28)
+    MinimizedPill.BackgroundColor3 = COLORS.DarkMid
+    MinimizedPill.BorderSizePixel = 0
+    MinimizedPill.AutoButtonColor = false
+    MinimizedPill.Visible = false
+    MinimizedPill.ZIndex = 100
+    MinimizedPill.Parent = ScreenGui
+    createCorner(MinimizedPill, 28)
+    MinimizedStroke = createStroke(MinimizedPill, COLORS.BrandRed, 2, 0.1)
+    BindInteractionSounds(MinimizedPill)
+    makeDraggable(MinimizedPill, MinimizedPill)
+    LoadImageAsync(MinimizedPill, IMAGE_URLS.PillLogo)
+end
 
 local isMinimized = false
 local cachedWindowPos = MainFrame.Position
@@ -770,179 +790,179 @@ MenuFrame.Position = UDim2.new(0, 0, 0, 52)
 MenuFrame.BackgroundTransparency = 1
 MenuFrame.Parent = MainFrame
 
-local FilterRow = Instance.new("Frame")
-FilterRow.Name = "FilterRow"
-FilterRow.Size = UDim2.new(1, -36, 0, 36)
-FilterRow.Position = UDim2.new(0, 18, 0, 12)
-FilterRow.BackgroundTransparency = 1
-FilterRow.ZIndex = 2
-FilterRow.Parent = MenuFrame
-
 local CurrentGenre = "All"
-
 local GenreBtn = Instance.new("TextButton")
-GenreBtn.Name = "GenreBtn"
-GenreBtn.Size = UDim2.new(0, 115, 1, 0)
-GenreBtn.Position = UDim2.new(0, 0, 0, 0)
-GenreBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-GenreBtn.Text = "Genre: All "
-GenreBtn.TextColor3 = COLORS.White
-GenreBtn.Font = FONTS.Bold
-GenreBtn.TextSize = 12
-GenreBtn.AutoButtonColor = false
-GenreBtn.ZIndex = 3
-GenreBtn.Parent = FilterRow
-createCorner(GenreBtn, 4)
-createStroke(GenreBtn, COLORS.Border, 1, 0.4)
-BindInteractionSounds(GenreBtn)
-
 local GenreDropdown = Instance.new("ScrollingFrame")
-GenreDropdown.Name = "GenreDropdown"
-GenreDropdown.Size = UDim2.new(0, 140, 0, 110)
-GenreDropdown.Position = UDim2.new(0, 0, 1, 5)
-GenreDropdown.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-GenreDropdown.ZIndex = 5
-GenreDropdown.Visible = false
-GenreDropdown.ScrollBarThickness = 4
-GenreDropdown.ScrollBarImageColor3 = COLORS.BrandRed
-GenreDropdown.BorderSizePixel = 0
-GenreDropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
-GenreDropdown.Parent = GenreBtn
-createCorner(GenreDropdown, 4)
-createStroke(GenreDropdown, COLORS.Border, 1, 0.4)
-
-local GenreLayout = Instance.new("UIListLayout")
-GenreLayout.SortOrder = Enum.SortOrder.LayoutOrder
-GenreLayout.Parent = GenreDropdown
-
-GenreLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    GenreDropdown.CanvasSize = UDim2.new(0, 0, 0, GenreLayout.AbsoluteContentSize.Y)
-end)
-
-local GenresList = {"All", "My List", "Action", "Comedy", "Horror", "Insta Move", "Explicit"}
-for _, genre in ipairs(GenresList) do
-    local gBtn = Instance.new("TextButton")
-    gBtn.Size = UDim2.new(1, -6, 0, 26)
-    gBtn.BackgroundTransparency = 1
-    gBtn.Text = " " .. genre
-    gBtn.TextColor3 = COLORS.GreyLight
-    gBtn.Font = FONTS.Medium
-    gBtn.TextSize = 12
-    gBtn.TextXAlignment = Enum.TextXAlignment.Left
-    gBtn.ZIndex = 6
-    gBtn.Parent = GenreDropdown
-    BindInteractionSounds(gBtn)
-    gBtn.MouseEnter:Connect(function() TweenService:Create(gBtn, TweenInfo.new(0.1), {TextColor3 = COLORS.White, BackgroundTransparency = 0.9}):Play() end)
-    gBtn.MouseLeave:Connect(function() TweenService:Create(gBtn, TweenInfo.new(0.1), {TextColor3 = COLORS.GreyLight, BackgroundTransparency = 1}):Play() end)
-
-    gBtn.MouseButton1Click:Connect(function()
-        CurrentGenre = genre
-        GenreBtn.Text = "Genre: " .. genre .. " "
-        GenreDropdown.Visible = false
-        if updateCarousel then updateCarousel() end
-    end)
-end
-
-GenreBtn.MouseButton1Click:Connect(function() GenreDropdown.Visible = not GenreDropdown.Visible end)
-
-local SearchFrame = Instance.new("Frame")
-SearchFrame.Name = "SearchFrame"
-SearchFrame.Size = UDim2.new(0, 260, 1, 0)
-SearchFrame.Position = UDim2.new(0, 125, 0, 0)
-SearchFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-SearchFrame.BorderSizePixel = 0
-SearchFrame.ZIndex = 3
-SearchFrame.Parent = FilterRow
-createCorner(SearchFrame, 4)
-createStroke(SearchFrame, COLORS.Border, 1, 0.4)
-
-local SearchIcon = Instance.new("ImageLabel")
-SearchIcon.Name = "SearchIcon"
-SearchIcon.Size = UDim2.new(0, 15, 0, 15)
-SearchIcon.Position = UDim2.new(0, 10, 0.5, -7)
-SearchIcon.BackgroundTransparency = 1
-SearchIcon.ZIndex = 4
-SearchIcon.Parent = SearchFrame
-LoadImageAsync(SearchIcon, "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled226_20260710163154.png")
-
 local SearchBox = Instance.new("TextBox")
-SearchBox.Name = "SearchBox"
-SearchBox.Size = UDim2.new(1, -36, 1, 0)
-SearchBox.Position = UDim2.new(0, 32, 0, 0)
-SearchBox.BackgroundTransparency = 1
-SearchBox.BorderSizePixel = 0
-SearchBox.Text = ""
-SearchBox.TextColor3 = COLORS.White
-SearchBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
-SearchBox.PlaceholderText = "Titles, creators..."
-SearchBox.TextSize = 13
-SearchBox.Font = FONTS.Book
-SearchBox.ClearTextOnFocus = false
-SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-SearchBox.ZIndex = 4
-SearchBox.Parent = SearchFrame
-
-SearchBox.Focused:Connect(function()
-    TweenService:Create(SearchFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
-end)
-SearchBox.FocusLost:Connect(function()
-    TweenService:Create(SearchFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24)}):Play()
-end)
-
 local TagScroll = Instance.new("ScrollingFrame")
-TagScroll.Name = "TagScroll"
-TagScroll.Size = UDim2.new(1, -395, 1, 0)
-TagScroll.Position = UDim2.new(0, 395, 0, 0)
-TagScroll.BackgroundTransparency = 1
-TagScroll.ScrollBarThickness = 2
-TagScroll.ScrollBarImageColor3 = COLORS.GreyMuted
-TagScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-TagScroll.ZIndex = 3
-TagScroll.Parent = FilterRow
-
-local TagLayout = Instance.new("UIListLayout")
-TagLayout.FillDirection = Enum.FillDirection.Horizontal
-TagLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-TagLayout.Padding = UDim.new(0, 8)
-TagLayout.Parent = TagScroll
-
 local ActiveTagsFilter = {}
 
-for _, tagName in ipairs(UniqueTags) do
-    local count = TagCounts[tagName]
-    local tBtn = Instance.new("TextButton")
-    tBtn.Text = tagName .. " (" .. count .. ")"
-    tBtn.Font = FONTS.Bold
-    tBtn.TextSize = 11
-    tBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-    tBtn.TextColor3 = COLORS.GreyLight
-    tBtn.ZIndex = 4
-    local size = TextService:GetTextSize(tBtn.Text, 11, FONTS.Bold, Vector2.new(999, 20))
-    tBtn.Size = UDim2.new(0, size.X + 16, 0, 26)
+do
+    local FilterRow = Instance.new("Frame")
+    FilterRow.Name = "FilterRow"
+    FilterRow.Size = UDim2.new(1, -36, 0, 36)
+    FilterRow.Position = UDim2.new(0, 18, 0, 12)
+    FilterRow.BackgroundTransparency = 1
+    FilterRow.ZIndex = 2
+    FilterRow.Parent = MenuFrame
 
-    createCorner(tBtn, 13)
-    local stroke = createStroke(tBtn, COLORS.Border, 1)
-    tBtn.Parent = TagScroll
+    GenreBtn.Name = "GenreBtn"
+    GenreBtn.Size = UDim2.new(0, 115, 1, 0)
+    GenreBtn.Position = UDim2.new(0, 0, 0, 0)
+    GenreBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+    GenreBtn.Text = "Genre: All "
+    GenreBtn.TextColor3 = COLORS.White
+    GenreBtn.Font = FONTS.Bold
+    GenreBtn.TextSize = 12
+    GenreBtn.AutoButtonColor = false
+    GenreBtn.ZIndex = 3
+    GenreBtn.Parent = FilterRow
+    createCorner(GenreBtn, 4)
+    createStroke(GenreBtn, COLORS.Border, 1, 0.4)
+    BindInteractionSounds(GenreBtn)
 
-    BindInteractionSounds(tBtn)
+    GenreDropdown.Name = "GenreDropdown"
+    GenreDropdown.Size = UDim2.new(0, 140, 0, 110)
+    GenreDropdown.Position = UDim2.new(0, 0, 1, 5)
+    GenreDropdown.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    GenreDropdown.ZIndex = 5
+    GenreDropdown.Visible = false
+    GenreDropdown.ScrollBarThickness = 4
+    GenreDropdown.ScrollBarImageColor3 = COLORS.BrandRed
+    GenreDropdown.BorderSizePixel = 0
+    GenreDropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
+    GenreDropdown.Parent = GenreBtn
+    createCorner(GenreDropdown, 4)
+    createStroke(GenreDropdown, COLORS.Border, 1, 0.4)
 
-    tBtn.MouseButton1Click:Connect(function()
-        if ActiveTagsFilter[tagName] then
-            ActiveTagsFilter[tagName] = nil
-            TweenService:Create(tBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24), TextColor3 = COLORS.GreyLight}):Play()
-            stroke.Color = COLORS.Border
-        else
-            ActiveTagsFilter[tagName] = true
-            TweenService:Create(tBtn, TweenInfo.new(0.2), {BackgroundColor3 = COLORS.BrandRed, TextColor3 = COLORS.White}):Play()
-            stroke.Color = COLORS.BrandRed
-        end
-        if updateCarousel then updateCarousel() end
+    local GenreLayout = Instance.new("UIListLayout")
+    GenreLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    GenreLayout.Parent = GenreDropdown
+
+    GenreLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        GenreDropdown.CanvasSize = UDim2.new(0, 0, 0, GenreLayout.AbsoluteContentSize.Y)
+    end)
+
+    local GenresList = {"All", "My List", "Action", "Comedy", "Horror", "Insta Move", "Explicit"}
+    for _, genre in ipairs(GenresList) do
+        local gBtn = Instance.new("TextButton")
+        gBtn.Size = UDim2.new(1, -6, 0, 26)
+        gBtn.BackgroundTransparency = 1
+        gBtn.Text = " " .. genre
+        gBtn.TextColor3 = COLORS.GreyLight
+        gBtn.Font = FONTS.Medium
+        gBtn.TextSize = 12
+        gBtn.TextXAlignment = Enum.TextXAlignment.Left
+        gBtn.ZIndex = 6
+        gBtn.Parent = GenreDropdown
+        BindInteractionSounds(gBtn)
+        gBtn.MouseEnter:Connect(function() TweenService:Create(gBtn, TweenInfo.new(0.1), {TextColor3 = COLORS.White, BackgroundTransparency = 0.9}):Play() end)
+        gBtn.MouseLeave:Connect(function() TweenService:Create(gBtn, TweenInfo.new(0.1), {TextColor3 = COLORS.GreyLight, BackgroundTransparency = 1}):Play() end)
+
+        gBtn.MouseButton1Click:Connect(function()
+            CurrentGenre = genre
+            GenreBtn.Text = "Genre: " .. genre .. " "
+            GenreDropdown.Visible = false
+            if updateCarousel then updateCarousel() end
+        end)
+    end
+
+    GenreBtn.MouseButton1Click:Connect(function() GenreDropdown.Visible = not GenreDropdown.Visible end)
+
+    local SearchFrame = Instance.new("Frame")
+    SearchFrame.Name = "SearchFrame"
+    SearchFrame.Size = UDim2.new(0, 260, 1, 0)
+    SearchFrame.Position = UDim2.new(0, 125, 0, 0)
+    SearchFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+    SearchFrame.BorderSizePixel = 0
+    SearchFrame.ZIndex = 3
+    SearchFrame.Parent = FilterRow
+    createCorner(SearchFrame, 4)
+    createStroke(SearchFrame, COLORS.Border, 1, 0.4)
+
+    local SearchIcon = Instance.new("ImageLabel")
+    SearchIcon.Name = "SearchIcon"
+    SearchIcon.Size = UDim2.new(0, 15, 0, 15)
+    SearchIcon.Position = UDim2.new(0, 10, 0.5, -7)
+    SearchIcon.BackgroundTransparency = 1
+    SearchIcon.ZIndex = 4
+    SearchIcon.Parent = SearchFrame
+    LoadImageAsync(SearchIcon, "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled226_20260710163154.png")
+
+    SearchBox.Name = "SearchBox"
+    SearchBox.Size = UDim2.new(1, -36, 1, 0)
+    SearchBox.Position = UDim2.new(0, 32, 0, 0)
+    SearchBox.BackgroundTransparency = 1
+    SearchBox.BorderSizePixel = 0
+    SearchBox.Text = ""
+    SearchBox.TextColor3 = COLORS.White
+    SearchBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
+    SearchBox.PlaceholderText = "Titles, creators..."
+    SearchBox.TextSize = 13
+    SearchBox.Font = FONTS.Book
+    SearchBox.ClearTextOnFocus = false
+    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    SearchBox.ZIndex = 4
+    SearchBox.Parent = SearchFrame
+
+    SearchBox.Focused:Connect(function()
+        TweenService:Create(SearchFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+    end)
+    SearchBox.FocusLost:Connect(function()
+        TweenService:Create(SearchFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24)}):Play()
+    end)
+
+    TagScroll.Name = "TagScroll"
+    TagScroll.Size = UDim2.new(1, -395, 1, 0)
+    TagScroll.Position = UDim2.new(0, 395, 0, 0)
+    TagScroll.BackgroundTransparency = 1
+    TagScroll.ScrollBarThickness = 2
+    TagScroll.ScrollBarImageColor3 = COLORS.GreyMuted
+    TagScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TagScroll.ZIndex = 3
+    TagScroll.Parent = FilterRow
+
+    local TagLayout = Instance.new("UIListLayout")
+    TagLayout.FillDirection = Enum.FillDirection.Horizontal
+    TagLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    TagLayout.Padding = UDim.new(0, 8)
+    TagLayout.Parent = TagScroll
+
+    for _, tagName in ipairs(UniqueTags) do
+        local count = TagCounts[tagName]
+        local tBtn = Instance.new("TextButton")
+        tBtn.Text = tagName .. " (" .. count .. ")"
+        tBtn.Font = FONTS.Bold
+        tBtn.TextSize = 11
+        tBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+        tBtn.TextColor3 = COLORS.GreyLight
+        tBtn.ZIndex = 4
+        local size = TextService:GetTextSize(tBtn.Text, 11, FONTS.Bold, Vector2.new(999, 20))
+        tBtn.Size = UDim2.new(0, size.X + 16, 0, 26)
+
+        createCorner(tBtn, 13)
+        local stroke = createStroke(tBtn, COLORS.Border, 1)
+        tBtn.Parent = TagScroll
+        BindInteractionSounds(tBtn)
+
+        tBtn.MouseButton1Click:Connect(function()
+            if ActiveTagsFilter[tagName] then
+                ActiveTagsFilter[tagName] = nil
+                TweenService:Create(tBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24), TextColor3 = COLORS.GreyLight}):Play()
+                stroke.Color = COLORS.Border
+            else
+                ActiveTagsFilter[tagName] = true
+                TweenService:Create(tBtn, TweenInfo.new(0.2), {BackgroundColor3 = COLORS.BrandRed, TextColor3 = COLORS.White}):Play()
+                stroke.Color = COLORS.BrandRed
+            end
+            if updateCarousel then updateCarousel() end
+        end)
+    end
+
+    TagLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TagScroll.CanvasSize = UDim2.new(0, TagLayout.AbsoluteContentSize.X + 10, 0, 0)
     end)
 end
-
-TagLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    TagScroll.CanvasSize = UDim2.new(0, TagLayout.AbsoluteContentSize.X + 10, 0, 0)
-end)
 
 local CarouselContainer = Instance.new("Frame")
 CarouselContainer.Name = "CarouselContainer"
@@ -1004,289 +1024,297 @@ DotsHolder.BackgroundTransparency = 1
 DotsHolder.Parent = MenuFrame
 
 local DetailFrame = Instance.new("Frame")
-DetailFrame.Name = "DetailFrame"
-DetailFrame.Size = UDim2.new(1, 0, 1, -52)
-DetailFrame.Position = UDim2.new(0, 0, 0, 52)
-DetailFrame.BackgroundTransparency = 1
-DetailFrame.Visible = false
-DetailFrame.Parent = MainFrame
-
-local DetailBody = Instance.new("Frame")
-DetailBody.Name = "DetailBody"
-DetailBody.Size = UDim2.new(1, -36, 1, -24)
-DetailBody.Position = UDim2.new(0, 18, 0, 12)
-DetailBody.BackgroundTransparency = 1
-DetailBody.Parent = DetailFrame
-
 local DetailImage = Instance.new("ImageLabel")
-DetailImage.Name = "DetailImage"
-DetailImage.Size = UDim2.new(0.38, 0, 1, 0)
-DetailImage.BackgroundColor3 = COLORS.DarkCard
-DetailImage.ScaleType = Enum.ScaleType.Crop
-DetailImage.Parent = DetailBody
-createCorner(DetailImage, 6)
-
-local DetailImageGlow = Instance.new("ImageLabel")
-DetailImageGlow.Size = UDim2.new(1, 20, 1, 20)
-DetailImageGlow.Position = UDim2.new(0, -10, 0, -10)
-DetailImageGlow.BackgroundTransparency = 1
-DetailImageGlow.Image = "rbxassetid://6014261993"
-DetailImageGlow.ImageColor3 = Color3.new(0,0,0)
-DetailImageGlow.ImageTransparency = 0.5
-DetailImageGlow.ScaleType = Enum.ScaleType.Slice
-DetailImageGlow.SliceCenter = Rect.new(49, 49, 450, 450)
-DetailImageGlow.ZIndex = 0
-DetailImageGlow.Parent = DetailImage
-
-local InfoPanel = Instance.new("Frame")
-InfoPanel.Name = "InfoPanel"
-InfoPanel.Size = UDim2.new(0.58, 0, 1, 0)
-InfoPanel.Position = UDim2.new(0.42, 0, 0, 0)
-InfoPanel.BackgroundTransparency = 1
-InfoPanel.Parent = DetailBody
-
 local DetailTitle = Instance.new("TextLabel")
-DetailTitle.Name = "DetailTitle"
-DetailTitle.Size = UDim2.new(1, 0, 0, 36)
-DetailTitle.BackgroundTransparency = 1
-DetailTitle.TextColor3 = COLORS.White
-DetailTitle.TextSize = 24
-DetailTitle.Font = FONTS.Heavy
-DetailTitle.TextXAlignment = Enum.TextXAlignment.Left
-DetailTitle.TextTruncate = Enum.TextTruncate.AtEnd
-DetailTitle.Parent = InfoPanel
-
 local MetaRow = Instance.new("TextLabel")
-MetaRow.Name = "MetaRow"
-MetaRow.Size = UDim2.new(1, 0, 0, 16)
-MetaRow.Position = UDim2.new(0, 0, 0, 40)
-MetaRow.BackgroundTransparency = 1
-MetaRow.TextColor3 = COLORS.GreyMuted
-MetaRow.TextSize = 12
-MetaRow.Font = FONTS.Medium
-MetaRow.TextXAlignment = Enum.TextXAlignment.Left
-MetaRow.Parent = InfoPanel
-
 local TagsDetailScroll = Instance.new("ScrollingFrame")
-TagsDetailScroll.Name = "TagsDetailScroll"
-TagsDetailScroll.Size = UDim2.new(1, 0, 0, 30)
-TagsDetailScroll.Position = UDim2.new(0, 0, 0, 60)
-TagsDetailScroll.BackgroundTransparency = 1
-TagsDetailScroll.ScrollBarThickness = 0
-TagsDetailScroll.Parent = InfoPanel
-
 local DetailTagsLayout = Instance.new("UIListLayout")
-DetailTagsLayout.FillDirection = Enum.FillDirection.Horizontal
-DetailTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-DetailTagsLayout.Padding = UDim.new(0, 8)
-DetailTagsLayout.Parent = TagsDetailScroll
-
 local DetailDescription = Instance.new("TextLabel")
-DetailDescription.Name = "DetailDescription"
-DetailDescription.Size = UDim2.new(1, 0, 1, -150)
-DetailDescription.Position = UDim2.new(0, 0, 0, 95)
-DetailDescription.BackgroundTransparency = 1
-DetailDescription.TextColor3 = COLORS.GreyLight
-DetailDescription.TextSize = 13
-DetailDescription.Font = FONTS.Book
-DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
-DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
-DetailDescription.TextWrapped = true
-DetailDescription.Parent = InfoPanel
-
-local ButtonRow = Instance.new("Frame")
-ButtonRow.Name = "ButtonRow"
-ButtonRow.Size = UDim2.new(1, 0, 0, 44)
-ButtonRow.Position = UDim2.new(0, 0, 1, -54)
-ButtonRow.BackgroundTransparency = 1
-ButtonRow.Parent = InfoPanel
-
-local ButtonLayout = Instance.new("UIListLayout")
-ButtonLayout.FillDirection = Enum.FillDirection.Horizontal
-ButtonLayout.Padding = UDim.new(0, 12)
-ButtonLayout.Parent = ButtonRow
-
 local PlayBtn = Instance.new("TextButton")
-PlayBtn.Name = "PlayBtn"
-PlayBtn.Size = UDim2.new(0, 120, 1, 0)
-PlayBtn.BackgroundColor3 = COLORS.BrandRed
-PlayBtn.Text = "Execute"
-PlayBtn.Font = FONTS.Bold
-PlayBtn.TextSize = 14
-PlayBtn.TextColor3 = COLORS.White
-PlayBtn.AutoButtonColor = false
-PlayBtn.Parent = ButtonRow
-createCorner(PlayBtn, 4)
-BindInteractionSounds(PlayBtn)
-
 local FavBtn = Instance.new("TextButton")
-FavBtn.Name = "FavBtn"
-FavBtn.Size = UDim2.new(0, 100, 1, 0)
-FavBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-FavBtn.Text = "+ My List"
-FavBtn.Font = FONTS.Bold
-FavBtn.TextSize = 12
-FavBtn.TextColor3 = COLORS.White
-FavBtn.AutoButtonColor = false
-FavBtn.Parent = ButtonRow
-createCorner(FavBtn, 4)
-createStroke(FavBtn, COLORS.Border, 1)
-BindInteractionSounds(FavBtn)
-
-FavBtn.MouseEnter:Connect(function() TweenService:Create(FavBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play() end)
-FavBtn.MouseLeave:Connect(function() TweenService:Create(FavBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(35, 35, 35)}):Play() end)
-
 local BackBtn = Instance.new("TextButton")
-BackBtn.Name = "BackBtn"
-BackBtn.Size = UDim2.new(0, 90, 1, 0)
-BackBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-BackBtn.Text = "Back"
-BackBtn.Font = FONTS.Bold
-BackBtn.TextSize = 14
-BackBtn.TextColor3 = COLORS.White
-BackBtn.AutoButtonColor = false
-BackBtn.Parent = ButtonRow
-createCorner(BackBtn, 4)
-BindInteractionSounds(BackBtn)
 
-BackBtn.MouseEnter:Connect(function() TweenService:Create(BackBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(55, 55, 55)}):Play() end)
-BackBtn.MouseLeave:Connect(function() TweenService:Create(BackBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play() end)
+do
+    DetailFrame.Name = "DetailFrame"
+    DetailFrame.Size = UDim2.new(1, 0, 1, -52)
+    DetailFrame.Position = UDim2.new(0, 0, 0, 52)
+    DetailFrame.BackgroundTransparency = 1
+    DetailFrame.Visible = false
+    DetailFrame.Parent = MainFrame
+
+    local DetailBody = Instance.new("Frame")
+    DetailBody.Name = "DetailBody"
+    DetailBody.Size = UDim2.new(1, -36, 1, -24)
+    DetailBody.Position = UDim2.new(0, 18, 0, 12)
+    DetailBody.BackgroundTransparency = 1
+    DetailBody.Parent = DetailFrame
+
+    DetailImage.Name = "DetailImage"
+    DetailImage.Size = UDim2.new(0.38, 0, 1, 0)
+    DetailImage.BackgroundColor3 = COLORS.DarkCard
+    DetailImage.ScaleType = Enum.ScaleType.Crop
+    DetailImage.Parent = DetailBody
+    createCorner(DetailImage, 6)
+
+    local DetailImageGlow = Instance.new("ImageLabel")
+    DetailImageGlow.Size = UDim2.new(1, 20, 1, 20)
+    DetailImageGlow.Position = UDim2.new(0, -10, 0, -10)
+    DetailImageGlow.BackgroundTransparency = 1
+    DetailImageGlow.Image = "rbxassetid://6014261993"
+    DetailImageGlow.ImageColor3 = Color3.new(0,0,0)
+    DetailImageGlow.ImageTransparency = 0.5
+    DetailImageGlow.ScaleType = Enum.ScaleType.Slice
+    DetailImageGlow.SliceCenter = Rect.new(49, 49, 450, 450)
+    DetailImageGlow.ZIndex = 0
+    DetailImageGlow.Parent = DetailImage
+
+    local InfoPanel = Instance.new("Frame")
+    InfoPanel.Name = "InfoPanel"
+    InfoPanel.Size = UDim2.new(0.58, 0, 1, 0)
+    InfoPanel.Position = UDim2.new(0.42, 0, 0, 0)
+    InfoPanel.BackgroundTransparency = 1
+    InfoPanel.Parent = DetailBody
+
+    DetailTitle.Name = "DetailTitle"
+    DetailTitle.Size = UDim2.new(1, 0, 0, 36)
+    DetailTitle.BackgroundTransparency = 1
+    DetailTitle.TextColor3 = COLORS.White
+    DetailTitle.TextSize = 24
+    DetailTitle.Font = FONTS.Heavy
+    DetailTitle.TextXAlignment = Enum.TextXAlignment.Left
+    DetailTitle.TextTruncate = Enum.TextTruncate.AtEnd
+    DetailTitle.Parent = InfoPanel
+
+    MetaRow.Name = "MetaRow"
+    MetaRow.Size = UDim2.new(1, 0, 0, 16)
+    MetaRow.Position = UDim2.new(0, 0, 0, 40)
+    MetaRow.BackgroundTransparency = 1
+    MetaRow.TextColor3 = COLORS.GreyMuted
+    MetaRow.TextSize = 12
+    MetaRow.Font = FONTS.Medium
+    MetaRow.TextXAlignment = Enum.TextXAlignment.Left
+    MetaRow.Parent = InfoPanel
+
+    TagsDetailScroll.Name = "TagsDetailScroll"
+    TagsDetailScroll.Size = UDim2.new(1, 0, 0, 30)
+    TagsDetailScroll.Position = UDim2.new(0, 0, 0, 60)
+    TagsDetailScroll.BackgroundTransparency = 1
+    TagsDetailScroll.ScrollBarThickness = 0
+    TagsDetailScroll.Parent = InfoPanel
+
+    DetailTagsLayout.FillDirection = Enum.FillDirection.Horizontal
+    DetailTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    DetailTagsLayout.Padding = UDim.new(0, 8)
+    DetailTagsLayout.Parent = TagsDetailScroll
+
+    DetailDescription.Name = "DetailDescription"
+    DetailDescription.Size = UDim2.new(1, 0, 1, -150)
+    DetailDescription.Position = UDim2.new(0, 0, 0, 95)
+    DetailDescription.BackgroundTransparency = 1
+    DetailDescription.TextColor3 = COLORS.GreyLight
+    DetailDescription.TextSize = 13
+    DetailDescription.Font = FONTS.Book
+    DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
+    DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
+    DetailDescription.TextWrapped = true
+    DetailDescription.Parent = InfoPanel
+
+    local ButtonRow = Instance.new("Frame")
+    ButtonRow.Name = "ButtonRow"
+    ButtonRow.Size = UDim2.new(1, 0, 0, 44)
+    ButtonRow.Position = UDim2.new(0, 0, 1, -54)
+    ButtonRow.BackgroundTransparency = 1
+    ButtonRow.Parent = InfoPanel
+
+    local ButtonLayout = Instance.new("UIListLayout")
+    ButtonLayout.FillDirection = Enum.FillDirection.Horizontal
+    ButtonLayout.Padding = UDim.new(0, 12)
+    ButtonLayout.Parent = ButtonRow
+
+    PlayBtn.Name = "PlayBtn"
+    PlayBtn.Size = UDim2.new(0, 120, 1, 0)
+    PlayBtn.BackgroundColor3 = COLORS.BrandRed
+    PlayBtn.Text = "Execute"
+    PlayBtn.Font = FONTS.Bold
+    PlayBtn.TextSize = 14
+    PlayBtn.TextColor3 = COLORS.White
+    PlayBtn.AutoButtonColor = false
+    PlayBtn.Parent = ButtonRow
+    createCorner(PlayBtn, 4)
+    BindInteractionSounds(PlayBtn)
+
+    FavBtn.Name = "FavBtn"
+    FavBtn.Size = UDim2.new(0, 100, 1, 0)
+    FavBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    FavBtn.Text = "+ My List"
+    FavBtn.Font = FONTS.Bold
+    FavBtn.TextSize = 12
+    FavBtn.TextColor3 = COLORS.White
+    FavBtn.AutoButtonColor = false
+    FavBtn.Parent = ButtonRow
+    createCorner(FavBtn, 4)
+    createStroke(FavBtn, COLORS.Border, 1)
+    BindInteractionSounds(FavBtn)
+
+    FavBtn.MouseEnter:Connect(function() TweenService:Create(FavBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play() end)
+    FavBtn.MouseLeave:Connect(function() TweenService:Create(FavBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(35, 35, 35)}):Play() end)
+
+    BackBtn.Name = "BackBtn"
+    BackBtn.Size = UDim2.new(0, 90, 1, 0)
+    BackBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    BackBtn.Text = "Back"
+    BackBtn.Font = FONTS.Bold
+    BackBtn.TextSize = 14
+    BackBtn.TextColor3 = COLORS.White
+    BackBtn.AutoButtonColor = false
+    BackBtn.Parent = ButtonRow
+    createCorner(BackBtn, 4)
+    BindInteractionSounds(BackBtn)
+
+    BackBtn.MouseEnter:Connect(function() TweenService:Create(BackBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(55, 55, 55)}):Play() end)
+    BackBtn.MouseLeave:Connect(function() TweenService:Create(BackBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play() end)
+end
 
 local ExecutorFrame = Instance.new("Frame")
-ExecutorFrame.Name = "ExecutorFrame"
-ExecutorFrame.Size = UDim2.new(1, 0, 1, -52)
-ExecutorFrame.Position = UDim2.new(0, 0, 0, 52)
-ExecutorFrame.BackgroundTransparency = 1
-ExecutorFrame.Visible = false
-ExecutorFrame.Parent = MainFrame
-
-local ExecBody = Instance.new("Frame")
-ExecBody.Size = UDim2.new(1, -36, 1, -24)
-ExecBody.Position = UDim2.new(0, 18, 0, 12)
-ExecBody.BackgroundTransparency = 1
-ExecBody.Parent = ExecutorFrame
-
 local CodeInput = Instance.new("TextBox")
-CodeInput.Size = UDim2.new(1, 0, 1, -55)
-CodeInput.Position = UDim2.new(0, 0, 0, 0)
-CodeInput.BackgroundColor3 = COLORS.DarkCard
-CodeInput.Text = "print('Action!')"
-CodeInput.TextColor3 = COLORS.GreyLight
-CodeInput.Font = Enum.Font.Code
-CodeInput.TextSize = 13
-CodeInput.TextXAlignment = Enum.TextXAlignment.Left
-CodeInput.TextYAlignment = Enum.TextYAlignment.Top
-CodeInput.ClearTextOnFocus = false
-CodeInput.MultiLine = true
-CodeInput.Parent = ExecBody
-createCorner(CodeInput, 6)
-createStroke(CodeInput, COLORS.Border, 1)
-
-local CodePadding = Instance.new("UIPadding")
-CodePadding.PaddingTop = UDim.new(0, 10)
-CodePadding.PaddingLeft = UDim.new(0, 10)
-CodePadding.PaddingRight = UDim.new(0, 10)
-CodePadding.PaddingBottom = UDim.new(0, 10)
-CodePadding.Parent = CodeInput
-
 local ExecActionBtn = Instance.new("TextButton")
-ExecActionBtn.Size = UDim2.new(0, 150, 0, 40)
-ExecActionBtn.Position = UDim2.new(1, -160, 1, -45)
-ExecActionBtn.BackgroundColor3 = COLORS.BrandRed
-ExecActionBtn.Text = "Execute"
-ExecActionBtn.Font = FONTS.Bold
-ExecActionBtn.TextSize = 13
-ExecActionBtn.TextColor3 = COLORS.White
-ExecActionBtn.AutoButtonColor = false
-ExecActionBtn.Parent = ExecBody
-createCorner(ExecActionBtn, 4)
-BindInteractionSounds(ExecActionBtn)
-
 local ExecClearBtn = Instance.new("TextButton")
-ExecClearBtn.Size = UDim2.new(0, 90, 0, 40)
-ExecClearBtn.Position = UDim2.new(1, -260, 1, -45)
-ExecClearBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-ExecClearBtn.Text = "Clear"
-ExecClearBtn.Font = FONTS.Bold
-ExecClearBtn.TextSize = 13
-ExecClearBtn.TextColor3 = COLORS.White
-ExecClearBtn.AutoButtonColor = false
-ExecClearBtn.Parent = ExecBody
-createCorner(ExecClearBtn, 4)
-createStroke(ExecClearBtn, COLORS.Border, 1)
-BindInteractionSounds(ExecClearBtn)
 
-ExecActionBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        local func = loadstring(CodeInput.Text)
-        if func then func() end
+do
+    ExecutorFrame.Name = "ExecutorFrame"
+    ExecutorFrame.Size = UDim2.new(1, 0, 1, -52)
+    ExecutorFrame.Position = UDim2.new(0, 0, 0, 52)
+    ExecutorFrame.BackgroundTransparency = 1
+    ExecutorFrame.Visible = false
+    ExecutorFrame.Parent = MainFrame
+
+    local ExecBody = Instance.new("Frame")
+    ExecBody.Size = UDim2.new(1, -36, 1, -24)
+    ExecBody.Position = UDim2.new(0, 18, 0, 12)
+    ExecBody.BackgroundTransparency = 1
+    ExecBody.Parent = ExecutorFrame
+
+    CodeInput.Size = UDim2.new(1, 0, 1, -55)
+    CodeInput.Position = UDim2.new(0, 0, 0, 0)
+    CodeInput.BackgroundColor3 = COLORS.DarkCard
+    CodeInput.Text = "print('Action!')"
+    CodeInput.TextColor3 = COLORS.GreyLight
+    CodeInput.Font = Enum.Font.Code
+    CodeInput.TextSize = 13
+    CodeInput.TextXAlignment = Enum.TextXAlignment.Left
+    CodeInput.TextYAlignment = Enum.TextYAlignment.Top
+    CodeInput.ClearTextOnFocus = false
+    CodeInput.MultiLine = true
+    CodeInput.Parent = ExecBody
+    createCorner(CodeInput, 6)
+    createStroke(CodeInput, COLORS.Border, 1)
+
+    local CodePadding = Instance.new("UIPadding")
+    CodePadding.PaddingTop = UDim.new(0, 10)
+    CodePadding.PaddingLeft = UDim.new(0, 10)
+    CodePadding.PaddingRight = UDim.new(0, 10)
+    CodePadding.PaddingBottom = UDim.new(0, 10)
+    CodePadding.Parent = CodeInput
+
+    ExecActionBtn.Size = UDim2.new(0, 150, 0, 40)
+    ExecActionBtn.Position = UDim2.new(1, -160, 1, -45)
+    ExecActionBtn.BackgroundColor3 = COLORS.BrandRed
+    ExecActionBtn.Text = "Execute"
+    ExecActionBtn.Font = FONTS.Bold
+    ExecActionBtn.TextSize = 13
+    ExecActionBtn.TextColor3 = COLORS.White
+    ExecActionBtn.AutoButtonColor = false
+    ExecActionBtn.Parent = ExecBody
+    createCorner(ExecActionBtn, 4)
+    BindInteractionSounds(ExecActionBtn)
+
+    ExecClearBtn.Size = UDim2.new(0, 90, 0, 40)
+    ExecClearBtn.Position = UDim2.new(1, -260, 1, -45)
+    ExecClearBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    ExecClearBtn.Text = "Clear"
+    ExecClearBtn.Font = FONTS.Bold
+    ExecClearBtn.TextSize = 13
+    ExecClearBtn.TextColor3 = COLORS.White
+    ExecClearBtn.AutoButtonColor = false
+    ExecClearBtn.Parent = ExecBody
+    createCorner(ExecClearBtn, 4)
+    createStroke(ExecClearBtn, COLORS.Border, 1)
+    BindInteractionSounds(ExecClearBtn)
+
+    ExecActionBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            local func = loadstring(CodeInput.Text)
+            if func then func() end
+        end)
     end)
-end)
-ExecClearBtn.MouseButton1Click:Connect(function() CodeInput.Text = "" end)
+    ExecClearBtn.MouseButton1Click:Connect(function() CodeInput.Text = "" end)
+end
 
 local CreditsFrame = Instance.new("Frame")
-CreditsFrame.Name = "CreditsFrame"
-CreditsFrame.Size = UDim2.new(1, 0, 1, -52)
-CreditsFrame.Position = UDim2.new(0, 0, 0, 52)
-CreditsFrame.BackgroundTransparency = 1
-CreditsFrame.Visible = false
-CreditsFrame.Parent = MainFrame
+local CreditsBigN
+do
+    CreditsFrame.Name = "CreditsFrame"
+    CreditsFrame.Size = UDim2.new(1, 0, 1, -52)
+    CreditsFrame.Position = UDim2.new(0, 0, 0, 52)
+    CreditsFrame.BackgroundTransparency = 1
+    CreditsFrame.Visible = false
+    CreditsFrame.Parent = MainFrame
 
-local CreditsContent = Instance.new("Frame")
-CreditsContent.Name = "CreditsContent"
-CreditsContent.Size = UDim2.new(1, -36, 1, -24)
-CreditsContent.Position = UDim2.new(0, 18, 0, 12)
-CreditsContent.BackgroundTransparency = 1
-CreditsContent.Parent = CreditsFrame
+    local CreditsContent = Instance.new("Frame")
+    CreditsContent.Name = "CreditsContent"
+    CreditsContent.Size = UDim2.new(1, -36, 1, -24)
+    CreditsContent.Position = UDim2.new(0, 18, 0, 12)
+    CreditsContent.BackgroundTransparency = 1
+    CreditsContent.Parent = CreditsFrame
 
-local CreditsLogo = Instance.new("ImageLabel")
-CreditsLogo.Size = UDim2.new(0, 120, 0, 120)
-CreditsLogo.Position = UDim2.new(0.5, -60, 0.05, 0)
-CreditsLogo.BackgroundTransparency = 1
-CreditsLogo.Parent = CreditsContent
-LoadImageAsync(CreditsLogo, IMAGE_URLS.IntroLogo)
+    local CreditsLogo = Instance.new("ImageLabel")
+    CreditsLogo.Size = UDim2.new(0, 120, 0, 120)
+    CreditsLogo.Position = UDim2.new(0.5, -60, 0.05, 0)
+    CreditsLogo.BackgroundTransparency = 1
+    CreditsLogo.Parent = CreditsContent
+    LoadImageAsync(CreditsLogo, IMAGE_URLS.IntroLogo)
 
-local CreditsBigN = Instance.new("TextLabel")
-CreditsBigN.Size = UDim2.new(1, 0, 0, 60)
-CreditsBigN.Position = UDim2.new(0, 0, 0.05, 120)
-CreditsBigN.BackgroundTransparency = 1
-CreditsBigN.Text = "AN UNIVERSAL"
-CreditsBigN.TextColor3 = COLORS.BrandRed
-CreditsBigN.Font = FONTS.Heavy
-CreditsBigN.TextSize = 48
-CreditsBigN.Parent = CreditsContent
+    CreditsBigN = Instance.new("TextLabel")
+    CreditsBigN.Size = UDim2.new(1, 0, 0, 60)
+    CreditsBigN.Position = UDim2.new(0, 0, 0.05, 120)
+    CreditsBigN.BackgroundTransparency = 1
+    CreditsBigN.Text = "AN UNIVERSAL"
+    CreditsBigN.TextColor3 = COLORS.BrandRed
+    CreditsBigN.Font = FONTS.Heavy
+    CreditsBigN.TextSize = 48
+    CreditsBigN.Parent = CreditsContent
 
-local AuthorTitle = Instance.new("TextLabel")
-AuthorTitle.Size = UDim2.new(1, 0, 0, 30)
-AuthorTitle.Position = UDim2.new(0, 0, 0.05, 180)
-AuthorTitle.BackgroundTransparency = 1
-AuthorTitle.Text = "Created by: noli_0"
-AuthorTitle.TextColor3 = COLORS.White
-AuthorTitle.Font = FONTS.Bold
-AuthorTitle.TextSize = 18
-AuthorTitle.Parent = CreditsContent
+    local AuthorTitle = Instance.new("TextLabel")
+    AuthorTitle.Size = UDim2.new(1, 0, 0, 30)
+    AuthorTitle.Position = UDim2.new(0, 0, 0.05, 180)
+    AuthorTitle.BackgroundTransparency = 1
+    AuthorTitle.Text = "Created by: noli_0"
+    AuthorTitle.TextColor3 = COLORS.White
+    AuthorTitle.Font = FONTS.Bold
+    AuthorTitle.TextSize = 18
+    AuthorTitle.Parent = CreditsContent
 
-local CoFounderTitle = Instance.new("TextLabel")
-CoFounderTitle.Size = UDim2.new(1, 0, 0, 30)
-CoFounderTitle.Position = UDim2.new(0, 0, 0.05, 210)
-CoFounderTitle.BackgroundTransparency = 1
-CoFounderTitle.Text = "Co-Founder: thats_carvs"
-CoFounderTitle.TextColor3 = COLORS.White
-CoFounderTitle.Font = FONTS.Bold
-CoFounderTitle.TextSize = 16
-CoFounderTitle.Parent = CreditsContent
+    local CoFounderTitle = Instance.new("TextLabel")
+    CoFounderTitle.Size = UDim2.new(1, 0, 0, 30)
+    CoFounderTitle.Position = UDim2.new(0, 0, 0.05, 210)
+    CoFounderTitle.BackgroundTransparency = 1
+    CoFounderTitle.Text = "Co-Founder: thats_carvs"
+    CoFounderTitle.TextColor3 = COLORS.White
+    CoFounderTitle.Font = FONTS.Bold
+    CoFounderTitle.TextSize = 16
+    CoFounderTitle.Parent = CreditsContent
 
-local CreditsDescription = Instance.new("TextLabel")
-CreditsDescription.Size = UDim2.new(1, 0, 0, 40)
-CreditsDescription.Position = UDim2.new(0, 0, 0.05, 250)
-CreditsDescription.BackgroundTransparency = 1
-CreditsDescription.Text = "Everything is created with blood sweat and tears twim"
-CreditsDescription.TextColor3 = COLORS.GreyMuted
-CreditsDescription.Font = FONTS.Medium
-CreditsDescription.TextSize = 13
-CreditsDescription.Parent = CreditsContent
+    local CreditsDescription = Instance.new("TextLabel")
+    CreditsDescription.Size = UDim2.new(1, 0, 0, 40)
+    CreditsDescription.Position = UDim2.new(0, 0, 0.05, 250)
+    CreditsDescription.BackgroundTransparency = 1
+    CreditsDescription.Text = "Everything is created with blood sweat and tears twim"
+    CreditsDescription.TextColor3 = COLORS.GreyMuted
+    CreditsDescription.Font = FONTS.Medium
+    CreditsDescription.TextSize = 13
+    CreditsDescription.Parent = CreditsContent
+end
 
--- ### ADMIN PANEL REDESIGN ###
 local AdminFrame
 local AdminCodeInput
 local PlayersScroll
@@ -1306,7 +1334,6 @@ if IsAdmin(LocalPlayer.UserId) then
     AdminBody.BackgroundTransparency = 1
     AdminBody.Parent = AdminFrame
     
-    -- Command List Section (Left)
     local LeftPanel = Instance.new("Frame")
     LeftPanel.Size = UDim2.new(0.48, 0, 1, -55)
     LeftPanel.Position = UDim2.new(0, 0, 0, 0)
@@ -1354,6 +1381,15 @@ if IsAdmin(LocalPlayer.UserId) then
         "/Kill [name/all]",
         "/Kick [name/all]",
         "/Bring [name/all]",
+        "/Fling [name/all]",
+        "/Loopkill [name/all]",
+        "/Explode [name/all]",
+        "/Spin [name/all]",
+        "/Freeze [name/all]",
+        "/Thaw [name/all]",
+        "/Jump [name/all]",
+        "/Sit [name/all]",
+        "/Speed [name/all] [val]",
         "/ban [name] [reason] [duration]",
         "/unban [name]"
     }
@@ -1372,7 +1408,6 @@ if IsAdmin(LocalPlayer.UserId) then
         createStroke(cLbl, COLORS.Border, 1, 0.5)
     end
 
-    -- Active Users Section (Right)
     local RightPanel = Instance.new("Frame")
     RightPanel.Size = UDim2.new(0.48, 0, 1, -55)
     RightPanel.Position = UDim2.new(0.52, 0, 0, 0)
@@ -1416,7 +1451,6 @@ if IsAdmin(LocalPlayer.UserId) then
         PlayersScroll.CanvasSize = UDim2.new(0, 0, 0, PLayout.AbsoluteContentSize.Y + 10)
     end)
 
-    -- Command Input Field (Bottom)
     AdminCodeInput = Instance.new("TextBox")
     AdminCodeInput.Size = UDim2.new(1, 0, 0, 45)
     AdminCodeInput.Position = UDim2.new(0, 0, 1, -45)
@@ -1453,7 +1487,192 @@ if IsAdmin(LocalPlayer.UserId) then
     end)
 end
 
--- ### COMMAND LISTENER (All Users) ###
+local function ExecuteCommandEffect(speaker, targetPlayer, cmd, args)
+    if targetPlayer ~= LocalPlayer then return end
+    if cmd == "/kill" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Health = 0
+        end
+    elseif cmd == "/kick" then
+        LocalPlayer:Kick("You have been kicked by an AN Administrator.")
+    elseif cmd == "/bring" then
+        if speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = speaker.Character.HumanoidRootPart.CFrame
+        end
+    elseif cmd == "/fling" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Velocity = Vector3.new(math.random(-10000, 10000), 10000, math.random(-10000, 10000))
+            bv.Parent = hrp
+            task.delay(0.5, function() bv:Destroy() end)
+        end
+    elseif cmd == "/loopkill" then
+        LoopKillTargets[LocalPlayer.UserId] = not LoopKillTargets[LocalPlayer.UserId]
+    elseif cmd == "/explode" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local exp = Instance.new("Explosion")
+            exp.Position = LocalPlayer.Character.HumanoidRootPart.Position
+            exp.Parent = workspace
+            if LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.Health = 0
+            end
+        end
+    elseif cmd == "/spin" then
+        SpinTargets[LocalPlayer.UserId] = not SpinTargets[LocalPlayer.UserId]
+    elseif cmd == "/freeze" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = true
+        end
+    elseif cmd == "/thaw" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+        end
+    elseif cmd == "/jump" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Jump = true
+        end
+    elseif cmd == "/sit" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Sit = true
+        end
+    elseif cmd == "/speed" then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = tonumber(args[3]) or 16
+        end
+    end
+end
+
+local function ShowCommandRequestNotification(requesterPlayer, cmd, args)
+    local NotifFrame = Instance.new("Frame")
+    NotifFrame.Size = UDim2.new(0, 360, 0, 115)
+    NotifFrame.Position = UDim2.new(0.5, -180, 0, -130)
+    NotifFrame.BackgroundColor3 = COLORS.DarkBack
+    NotifFrame.BorderSizePixel = 0
+    NotifFrame.ZIndex = 300
+    NotifFrame.Parent = ScreenGui
+    createCorner(NotifFrame, 8)
+    createStroke(NotifFrame, COLORS.BrandRed, 2)
+    
+    local TitleLbl = Instance.new("TextLabel")
+    TitleLbl.Size = UDim2.new(1, -40, 0, 26)
+    TitleLbl.Position = UDim2.new(0, 12, 0, 6)
+    TitleLbl.BackgroundTransparency = 1
+    TitleLbl.Text = "⚠️ COMMAND PERMISSION REQUEST"
+    TitleLbl.TextColor3 = COLORS.BrandRed
+    TitleLbl.Font = FONTS.Heavy
+    TitleLbl.TextSize = 13
+    TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLbl.ZIndex = 301
+    TitleLbl.Parent = NotifFrame
+    
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+    CloseBtn.Position = UDim2.new(1, -30, 0, 6)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    CloseBtn.Text = "×"
+    CloseBtn.TextColor3 = COLORS.White
+    CloseBtn.Font = FONTS.Bold
+    CloseBtn.TextSize = 16
+    CloseBtn.ZIndex = 301
+    CloseBtn.Parent = NotifFrame
+    createCorner(CloseBtn, 12)
+    BindInteractionSounds(CloseBtn)
+    
+    local DescLbl = Instance.new("TextLabel")
+    DescLbl.Size = UDim2.new(1, -24, 0, 32)
+    DescLbl.Position = UDim2.new(0, 12, 0, 32)
+    DescLbl.BackgroundTransparency = 1
+    DescLbl.Text = string.format("%s (@%s) asks if they can %s you", requesterPlayer.DisplayName, requesterPlayer.Name, cmd)
+    DescLbl.TextColor3 = COLORS.White
+    DescLbl.Font = FONTS.Medium
+    DescLbl.TextSize = 12
+    DescLbl.TextXAlignment = Enum.TextXAlignment.Left
+    DescLbl.TextWrapped = true
+    DescLbl.ZIndex = 301
+    DescLbl.Parent = NotifFrame
+    
+    local AcceptBtn = Instance.new("TextButton")
+    AcceptBtn.Size = UDim2.new(0.45, 0, 0, 30)
+    AcceptBtn.Position = UDim2.new(0, 12, 0, 70)
+    AcceptBtn.BackgroundColor3 = Color3.fromRGB(46, 125, 50)
+    AcceptBtn.Text = "Accept"
+    AcceptBtn.TextColor3 = COLORS.White
+    AcceptBtn.Font = FONTS.Bold
+    AcceptBtn.TextSize = 12
+    AcceptBtn.ZIndex = 301
+    AcceptBtn.Parent = NotifFrame
+    createCorner(AcceptBtn, 4)
+    BindInteractionSounds(AcceptBtn)
+    
+    local RejectBtn = Instance.new("TextButton")
+    RejectBtn.Size = UDim2.new(0.45, 0, 0, 30)
+    RejectBtn.Position = UDim2.new(0.5, 5, 0, 70)
+    RejectBtn.BackgroundColor3 = Color3.fromRGB(198, 40, 40)
+    RejectBtn.Text = "Reject"
+    RejectBtn.TextColor3 = COLORS.White
+    RejectBtn.Font = FONTS.Bold
+    RejectBtn.TextSize = 12
+    RejectBtn.ZIndex = 301
+    RejectBtn.Parent = NotifFrame
+    createCorner(RejectBtn, 4)
+    BindInteractionSounds(RejectBtn)
+    
+    local BarBg = Instance.new("Frame")
+    BarBg.Size = UDim2.new(1, 0, 0, 4)
+    BarBg.Position = UDim2.new(0, 0, 1, -4)
+    BarBg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    BarBg.BorderSizePixel = 0
+    BarBg.ZIndex = 301
+    BarBg.Parent = NotifFrame
+    
+    local BarFill = Instance.new("Frame")
+    BarFill.Size = UDim2.new(1, 0, 1, 0)
+    BarFill.BackgroundColor3 = COLORS.BrandRed
+    BarFill.BorderSizePixel = 0
+    BarFill.ZIndex = 302
+    BarFill.Parent = BarBg
+    
+    PlaySoundAsync(SOUND_URLS.Intro, "Intro", 0.6)
+    
+    TweenService:Create(NotifFrame, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, -180, 0, 20)
+    }):Play()
+    
+    local duration = 12
+    local drainTween = TweenService:Create(BarFill, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 1, 0)
+    })
+    drainTween:Play()
+    
+    local isClosed = false
+    local function closeNotif()
+        if isClosed then return end
+        isClosed = true
+        drainTween:Cancel()
+        local outTween = TweenService:Create(NotifFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, -180, 0, -130)
+        })
+        outTween:Play()
+        outTween.Completed:Wait()
+        if NotifFrame then NotifFrame:Destroy() end
+    end
+    
+    CloseBtn.MouseButton1Click:Connect(closeNotif)
+    RejectBtn.MouseButton1Click:Connect(closeNotif)
+    AcceptBtn.MouseButton1Click:Connect(function()
+        ExecuteCommandEffect(requesterPlayer, LocalPlayer, cmd, args)
+        closeNotif()
+    end)
+    
+    task.delay(duration, function()
+        if not isClosed then
+            closeNotif()
+        end
+    end)
+end
+
 local function HandleAdminCommand(speaker, message)
     if not IsAdmin(speaker.UserId) then return end
     
@@ -1461,15 +1680,14 @@ local function HandleAdminCommand(speaker, message)
     local cmd = string.lower(args[1])
     local targetStr = args[2]
 
-    -- Format: /ban [username] [reason] [duration]
     if cmd == "/ban" then
+        if GetUserRank(speaker.UserId) < 2 then return end
         local targetName = args[2]
         if not targetName then return end
         
         local durationStr = args[#args]
         local reasonArgs = {}
         
-        -- Loop between username and duration to catch multi-word reasons
         for i = 3, #args - 1 do
             table.insert(reasonArgs, args[i])
         end
@@ -1477,7 +1695,6 @@ local function HandleAdminCommand(speaker, message)
         local reasonStr = table.concat(reasonArgs, " ")
         if reasonStr == "" then reasonStr = "Banned via Admin Panel" end
         
-        -- Resolve username to userid
         local targetUserId
         for _, p in ipairs(Players:GetPlayers()) do
             if string.lower(p.Name) == string.lower(targetName) or string.lower(p.DisplayName) == string.lower(targetName) then
@@ -1486,7 +1703,6 @@ local function HandleAdminCommand(speaker, message)
             end
         end
         
-        -- Fallback to Roblox API if player is not in the server
         if not targetUserId then
             pcall(function()
                 targetUserId = Players:GetUserIdFromNameAsync(targetName)
@@ -1494,6 +1710,7 @@ local function HandleAdminCommand(speaker, message)
         end
         
         if targetUserId then
+            if GetUserRank(speaker.UserId) <= GetUserRank(targetUserId) and GetUserRank(speaker.UserId) < 4 then return end
             local length = parseDuration(durationStr)
             local expireTime = (length == -1) and -1 or (os.time() + length)
             local payload = HttpService:JSONEncode({
@@ -1515,10 +1732,9 @@ local function HandleAdminCommand(speaker, message)
                 end
             end)
             
-            -- Kick immediately if in the current server
             for _, p in ipairs(Players:GetPlayers()) do
                 if p.UserId == targetUserId then
-                    p:Kick("You have been banned. Reason: " .. reasonStr)
+                    p:Kick("You have been banned.\nReason: " .. reasonStr)
                 end
             end
         else
@@ -1527,8 +1743,8 @@ local function HandleAdminCommand(speaker, message)
         return
     end
 
-    -- Format: /unban [username]
     if cmd == "/unban" then
+        if GetUserRank(speaker.UserId) < 2 then return end
         local targetName = args[2]
         if not targetName then return end
         
@@ -1552,20 +1768,31 @@ local function HandleAdminCommand(speaker, message)
     end
     
     if targetStr then
-        local myName = string.lower(LocalPlayer.Name)
-        local myDisplayName = string.lower(LocalPlayer.DisplayName)
-        targetStr = string.lower(targetStr)
+        local speakerRank = GetUserRank(speaker.UserId)
+        local targetPlayers = {}
         
-        if string.sub(myName, 1, #targetStr) == targetStr or string.sub(myDisplayName, 1, #targetStr) == targetStr or targetStr == "all" then
-            if cmd == "/kill" then
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.Health = 0
+        if string.lower(targetStr) == "all" then
+            for _, p in ipairs(Players:GetPlayers()) do
+                table.insert(targetPlayers, p)
+            end
+        else
+            for _, p in ipairs(Players:GetPlayers()) do
+                local pName = string.lower(p.Name)
+                local pDisplay = string.lower(p.DisplayName)
+                local tStr = string.lower(targetStr)
+                if string.sub(pName, 1, #tStr) == tStr or string.sub(pDisplay, 1, #tStr) == tStr then
+                    table.insert(targetPlayers, p)
                 end
-            elseif cmd == "/kick" then
-                LocalPlayer:Kick("You have been kicked by an AN Administrator.")
-            elseif cmd == "/bring" then
-                if speaker.Character and speaker.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = speaker.Character.HumanoidRootPart.CFrame
+            end
+        end
+        
+        for _, targetPlayer in ipairs(targetPlayers) do
+            local targetRank = GetUserRank(targetPlayer.UserId)
+            if speakerRank == 4 or speakerRank >= targetRank then
+                ExecuteCommandEffect(speaker, targetPlayer, cmd, args)
+            else
+                if targetPlayer == LocalPlayer then
+                    ShowCommandRequestNotification(speaker, cmd, args)
                 end
             end
         end
@@ -1579,120 +1806,253 @@ Players.PlayerAdded:Connect(function(p)
     p.Chatted:Connect(function(msg) HandleAdminCommand(p, msg) end)
 end)
 
-
 local SettingsFrame = Instance.new("Frame")
-SettingsFrame.Name = "SettingsFrame"
-SettingsFrame.Size = UDim2.new(1, 0, 1, -52)
-SettingsFrame.Position = UDim2.new(0, 0, 0, 52)
-SettingsFrame.BackgroundTransparency = 1
-SettingsFrame.Visible = false
-SettingsFrame.Parent = MainFrame
-
 local SettingsScroll = Instance.new("ScrollingFrame")
-SettingsScroll.Size = UDim2.new(1, -20, 1, -24)
-SettingsScroll.Position = UDim2.new(0, 10, 0, 12)
-SettingsScroll.BackgroundTransparency = 1
-SettingsScroll.ScrollBarThickness = 4
-SettingsScroll.BorderSizePixel = 0
-SettingsScroll.ScrollBarImageColor3 = COLORS.BrandRed
-SettingsScroll.Parent = SettingsFrame
-
 local SettingsLayout = Instance.new("UIListLayout")
-SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-SettingsLayout.Padding = UDim.new(0, 10)
-SettingsLayout.Parent = SettingsScroll
-
-local function createSettingRow(labelText)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -12, 0, 44)
-    row.BackgroundColor3 = COLORS.DarkCard
-    row.BorderSizePixel = 0
-    row.Parent = SettingsScroll
-    createCorner(row, 6)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0.4, 0, 1, 0)
-    lbl.Position = UDim2.new(0, 16, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = labelText
-    lbl.TextColor3 = COLORS.White
-    lbl.Font = FONTS.Bold
-    lbl.TextSize = 14
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = row
-
-    local actionContainer = Instance.new("Frame")
-    actionContainer.Size = UDim2.new(0.5, 0, 1, -12)
-    actionContainer.Position = UDim2.new(0.5, -16, 0, 6)
-    actionContainer.BackgroundTransparency = 1
-    actionContainer.Parent = row
-
-    return actionContainer, row
-end
-
-local function makeActionBtn(parent, text, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.48, 0, 1, 0)
-    btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)
-    btn.Text = text
-    btn.Font = FONTS.Bold
-    btn.TextSize = 12
-    btn.TextColor3 = COLORS.White
-    btn.AutoButtonColor = false
-    btn.Parent = parent
-    createCorner(btn, 4)
-    BindInteractionSounds(btn)
-    btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(55, 55, 55)}):Play() end)
-    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)}):Play() end)
-    return btn
-end
-
-local FeedbackRow = Instance.new("Frame")
-FeedbackRow.Size = UDim2.new(1, -12, 0, 90)
-FeedbackRow.BackgroundColor3 = COLORS.DarkCard
-FeedbackRow.BorderSizePixel = 0
-FeedbackRow.Parent = SettingsScroll
-createCorner(FeedbackRow, 6)
-
-local FBLabel = Instance.new("TextLabel")
-FBLabel.Size = UDim2.new(1, -32, 0, 30)
-FBLabel.Position = UDim2.new(0, 16, 0, 4)
-FBLabel.BackgroundTransparency = 1
-FBLabel.Text = "Submit feedback/report"
-FBLabel.TextColor3 = COLORS.White
-FBLabel.Font = FONTS.Bold
-FBLabel.TextSize = 14
-FBLabel.TextXAlignment = Enum.TextXAlignment.Left
-FBLabel.Parent = FeedbackRow
-
 local FBInput = Instance.new("TextBox")
-FBInput.Size = UDim2.new(1, -120, 0, 40)
-FBInput.Position = UDim2.new(0, 16, 0, 38)
-FBInput.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-FBInput.Text = ""
-FBInput.PlaceholderText = "Explain bugs or issues here..."
-FBInput.TextColor3 = COLORS.GreyLight
-FBInput.Font = FONTS.Book
-FBInput.TextSize = 12
-FBInput.TextXAlignment = Enum.TextXAlignment.Left
-FBInput.TextYAlignment = Enum.TextYAlignment.Top
-FBInput.ClearTextOnFocus = false
-FBInput.MultiLine = true
-FBInput.Parent = FeedbackRow
-createCorner(FBInput, 4)
-createStroke(FBInput, COLORS.Border, 1)
-
 local FBSubmitBtn = Instance.new("TextButton")
-FBSubmitBtn.Size = UDim2.new(0, 80, 0, 40)
-FBSubmitBtn.Position = UDim2.new(1, -96, 0, 38)
-FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
-FBSubmitBtn.Text = "Submit"
-FBSubmitBtn.Font = FONTS.Bold
-FBSubmitBtn.TextSize = 12
-FBSubmitBtn.TextColor3 = COLORS.White
-FBSubmitBtn.AutoButtonColor = false
-FBSubmitBtn.Parent = FeedbackRow
-createCorner(FBSubmitBtn, 4)
-BindInteractionSounds(FBSubmitBtn)
+local TagToggleBtn
+local JoinIdBox = Instance.new("TextBox")
+local HexInput = Instance.new("TextBox")
+local updateOverheadVisibility
+
+do
+    SettingsFrame.Name = "SettingsFrame"
+    SettingsFrame.Size = UDim2.new(1, 0, 1, -52)
+    SettingsFrame.Position = UDim2.new(0, 0, 0, 52)
+    SettingsFrame.BackgroundTransparency = 1
+    SettingsFrame.Visible = false
+    SettingsFrame.Parent = MainFrame
+
+    SettingsScroll.Size = UDim2.new(1, -20, 1, -24)
+    SettingsScroll.Position = UDim2.new(0, 10, 0, 12)
+    SettingsScroll.BackgroundTransparency = 1
+    SettingsScroll.ScrollBarThickness = 4
+    SettingsScroll.BorderSizePixel = 0
+    SettingsScroll.ScrollBarImageColor3 = COLORS.BrandRed
+    SettingsScroll.Parent = SettingsFrame
+
+    SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    SettingsLayout.Padding = UDim.new(0, 10)
+    SettingsLayout.Parent = SettingsScroll
+
+    local function createSettingRow(labelText)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -12, 0, 44)
+        row.BackgroundColor3 = COLORS.DarkCard
+        row.BorderSizePixel = 0
+        row.Parent = SettingsScroll
+        createCorner(row, 6)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.4, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 16, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = labelText
+        lbl.TextColor3 = COLORS.White
+        lbl.Font = FONTS.Bold
+        lbl.TextSize = 14
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = row
+
+        local actionContainer = Instance.new("Frame")
+        actionContainer.Size = UDim2.new(0.5, 0, 1, -12)
+        actionContainer.Position = UDim2.new(0.5, -16, 0, 6)
+        actionContainer.BackgroundTransparency = 1
+        actionContainer.Parent = row
+        return actionContainer, row
+    end
+
+    local function makeActionBtn(parent, text, color)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.48, 0, 1, 0)
+        btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)
+        btn.Text = text
+        btn.Font = FONTS.Bold
+        btn.TextSize = 12
+        btn.TextColor3 = COLORS.White
+        btn.AutoButtonColor = false
+        btn.Parent = parent
+        createCorner(btn, 4)
+        BindInteractionSounds(btn)
+        btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(55, 55, 55)}):Play() end)
+        btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)}):Play() end)
+        return btn
+    end
+
+    local FeedbackRow = Instance.new("Frame")
+    FeedbackRow.Size = UDim2.new(1, -12, 0, 90)
+    FeedbackRow.BackgroundColor3 = COLORS.DarkCard
+    FeedbackRow.BorderSizePixel = 0
+    FeedbackRow.Parent = SettingsScroll
+    createCorner(FeedbackRow, 6)
+
+    local FBLabel = Instance.new("TextLabel")
+    FBLabel.Size = UDim2.new(1, -32, 0, 30)
+    FBLabel.Position = UDim2.new(0, 16, 0, 4)
+    FBLabel.BackgroundTransparency = 1
+    FBLabel.Text = "Submit feedback/report"
+    FBLabel.TextColor3 = COLORS.White
+    FBLabel.Font = FONTS.Bold
+    FBLabel.TextSize = 14
+    FBLabel.TextXAlignment = Enum.TextXAlignment.Left
+    FBLabel.Parent = FeedbackRow
+
+    FBInput.Size = UDim2.new(1, -120, 0, 40)
+    FBInput.Position = UDim2.new(0, 16, 0, 38)
+    FBInput.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    FBInput.Text = ""
+    FBInput.PlaceholderText = "Explain bugs or issues here..."
+    FBInput.TextColor3 = COLORS.GreyLight
+    FBInput.Font = FONTS.Book
+    FBInput.TextSize = 12
+    FBInput.TextXAlignment = Enum.TextXAlignment.Left
+    FBInput.TextYAlignment = Enum.TextYAlignment.Top
+    FBInput.ClearTextOnFocus = false
+    FBInput.MultiLine = true
+    FBInput.Parent = FeedbackRow
+    createCorner(FBInput, 4)
+    createStroke(FBInput, COLORS.Border, 1)
+
+    FBSubmitBtn.Size = UDim2.new(0, 80, 0, 40)
+    FBSubmitBtn.Position = UDim2.new(1, -96, 0, 38)
+    FBSubmitBtn.BackgroundColor3 = COLORS.BrandRed
+    FBSubmitBtn.Text = "Submit"
+    FBSubmitBtn.Font = FONTS.Bold
+    FBSubmitBtn.TextSize = 12
+    FBSubmitBtn.TextColor3 = COLORS.White
+    FBSubmitBtn.AutoButtonColor = false
+    FBSubmitBtn.Parent = FeedbackRow
+    createCorner(FBSubmitBtn, 4)
+    BindInteractionSounds(FBSubmitBtn)
+
+    local OverheadToggleContainer = createSettingRow("Overhead User Tags")
+    local tagToggleLayout = Instance.new("UIListLayout")
+    tagToggleLayout.FillDirection = Enum.FillDirection.Horizontal
+    tagToggleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    tagToggleLayout.Parent = OverheadToggleContainer
+
+    TagToggleBtn = makeActionBtn(OverheadToggleContainer, Settings.ShowTags and "Enabled" or "Disabled", Settings.ShowTags and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(198, 40, 40))
+    TagToggleBtn.Size = UDim2.new(0.5, 0, 1, 0)
+
+    local TeleportActions = createSettingRow("Teleportation")
+    local tpLayout = Instance.new("UIListLayout")
+    tpLayout.FillDirection = Enum.FillDirection.Horizontal
+    tpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    tpLayout.Padding = UDim.new(0, 8)
+    tpLayout.Parent = TeleportActions
+
+    local RejoinBtn = makeActionBtn(TeleportActions, "Rejoin")
+    RejoinBtn.MouseButton1Click:Connect(function()
+        queueAutoExecute()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end)
+
+    local ServerHopBtn = makeActionBtn(TeleportActions, "Serverhop")
+    ServerHopBtn.MouseButton1Click:Connect(function()
+        local req = request or http_request or (syn and syn.request)
+        if not req then return end
+        local res = req({Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"})
+        if res and res.StatusCode == 200 then
+            local data = HttpService:JSONDecode(res.Body)
+            local servers = {}
+            for _, s in ipairs(data.data) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    table.insert(servers, s.id)
+                end
+            end
+            if #servers > 0 then
+                queueAutoExecute()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+            end
+        end
+    end)
+
+    local ServerIdActions = createSettingRow("Server ID Management")
+    local idLayout = Instance.new("UIListLayout")
+    idLayout.FillDirection = Enum.FillDirection.Horizontal
+    idLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    idLayout.Padding = UDim.new(0, 8)
+    idLayout.Parent = ServerIdActions
+
+    JoinIdBox.Size = UDim2.new(0.65, 0, 1, 0)
+    JoinIdBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    JoinIdBox.Text = ""
+    JoinIdBox.PlaceholderText = "Paste JobId & Hit Enter..."
+    JoinIdBox.TextColor3 = COLORS.White
+    JoinIdBox.Font = FONTS.Book
+    JoinIdBox.TextSize = 11
+    JoinIdBox.ClearTextOnFocus = false
+    JoinIdBox.Parent = ServerIdActions
+    createCorner(JoinIdBox, 4)
+    createStroke(JoinIdBox, COLORS.Border, 1)
+
+    JoinIdBox.FocusLost:Connect(function(enter)
+        if enter and JoinIdBox.Text ~= "" then
+            queueAutoExecute()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, JoinIdBox.Text, LocalPlayer)
+        end
+    end)
+
+    local CopyIdBtn = makeActionBtn(ServerIdActions, "Copy ID")
+    CopyIdBtn.Size = UDim2.new(0.3, 0, 1, 0)
+    CopyIdBtn.MouseButton1Click:Connect(function()
+        if setclipboard then setclipboard(tostring(game.JobId)) end
+    end)
+
+    local UiActions = createSettingRow("Interface")
+    local uiLayout = Instance.new("UIListLayout")
+    uiLayout.FillDirection = Enum.FillDirection.Horizontal
+    uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    uiLayout.Parent = UiActions
+
+    local DestroyBtn = makeActionBtn(UiActions, "Destroy UI")
+    DestroyBtn.MouseButton1Click:Connect(function() 
+        pcall(function() checkOut() end)
+        ScreenGui:Destroy() 
+    end)
+
+    local ThemeActions = createSettingRow("Theme Color")
+    local themeLayout = Instance.new("UIListLayout")
+    themeLayout.FillDirection = Enum.FillDirection.Horizontal
+    themeLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    themeLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    themeLayout.Padding = UDim.new(0, 8)
+    themeLayout.Parent = ThemeActions
+
+    HexInput.Size = UDim2.new(0, 70, 1, 0)
+    HexInput.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    HexInput.Text = CurrentThemeHex
+    HexInput.TextColor3 = COLORS.White
+    HexInput.Font = FONTS.Bold
+    HexInput.TextSize = 12
+    HexInput.Parent = ThemeActions
+    createCorner(HexInput, 4)
+    createStroke(HexInput, COLORS.Border, 1)
+
+    local PresetColors = {
+        Color3.fromRGB(229, 9, 20),
+        Color3.fromRGB(0, 120, 255),
+        Color3.fromRGB(0, 255, 127),
+        Color3.fromRGB(138, 43, 226),
+        Color3.fromRGB(255, 215, 0)
+    }
+
+    for _, color in ipairs(PresetColors) do
+        local colorBtn = Instance.new("TextButton")
+        colorBtn.Size = UDim2.new(0, 24, 0, 24)
+        colorBtn.BackgroundColor3 = color
+        colorBtn.Text = ""
+        colorBtn.Parent = ThemeActions
+        createCorner(colorBtn, 12)
+        BindInteractionSounds(colorBtn)
+        colorBtn.MouseButton1Click:Connect(function() applyNewTheme(color) end)
+    end
+
+    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 20)
+    SettingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 20)
+    end)
+end
 
 local maxReports = 3
 local currentReports = 0
@@ -1807,15 +2167,6 @@ FBSubmitBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
-local OverheadToggleContainer = createSettingRow("Overhead User Tags")
-local tagToggleLayout = Instance.new("UIListLayout")
-tagToggleLayout.FillDirection = Enum.FillDirection.Horizontal
-tagToggleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-tagToggleLayout.Parent = OverheadToggleContainer
-
-local TagToggleBtn = makeActionBtn(OverheadToggleContainer, Settings.ShowTags and "Enabled" or "Disabled", Settings.ShowTags and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(198, 40, 40))
-TagToggleBtn.Size = UDim2.new(0.5, 0, 1, 0)
-local updateOverheadVisibility
 TagToggleBtn.MouseButton1Click:Connect(function()
     Settings.ShowTags = not Settings.ShowTags
     saveSettings()
@@ -1823,111 +2174,6 @@ TagToggleBtn.MouseButton1Click:Connect(function()
     TagToggleBtn.BackgroundColor3 = Settings.ShowTags and Color3.fromRGB(46, 125, 50) or Color3.fromRGB(198, 40, 40)
     updateOverheadVisibility()
 end)
-
-local TeleportActions = createSettingRow("Teleportation")
-local tpLayout = Instance.new("UIListLayout")
-tpLayout.FillDirection = Enum.FillDirection.Horizontal
-tpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-tpLayout.Padding = UDim.new(0, 8)
-tpLayout.Parent = TeleportActions
-
-local RejoinBtn = makeActionBtn(TeleportActions, "Rejoin")
-RejoinBtn.MouseButton1Click:Connect(function()
-    queueAutoExecute()
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-end)
-
-local ServerHopBtn = makeActionBtn(TeleportActions, "Serverhop")
-ServerHopBtn.MouseButton1Click:Connect(function()
-    local req = request or http_request or (syn and syn.request)
-    if not req then return end
-    local res = req({Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"})
-    if res and res.StatusCode == 200 then
-        local data = HttpService:JSONDecode(res.Body)
-        local servers = {}
-        for _, s in ipairs(data.data) do
-            if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                table.insert(servers, s.id)
-            end
-        end
-        if #servers > 0 then
-            queueAutoExecute()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
-        end
-    end
-end)
-
-local ServerIdActions = createSettingRow("Server ID Management")
-local idLayout = Instance.new("UIListLayout")
-idLayout.FillDirection = Enum.FillDirection.Horizontal
-idLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-idLayout.Padding = UDim.new(0, 8)
-idLayout.Parent = ServerIdActions
-
-local JoinIdBox = Instance.new("TextBox")
-JoinIdBox.Size = UDim2.new(0.65, 0, 1, 0)
-JoinIdBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-JoinIdBox.Text = ""
-JoinIdBox.PlaceholderText = "Paste JobId & Hit Enter..."
-JoinIdBox.TextColor3 = COLORS.White
-JoinIdBox.Font = FONTS.Book
-JoinIdBox.TextSize = 11
-JoinIdBox.ClearTextOnFocus = false
-JoinIdBox.Parent = ServerIdActions
-createCorner(JoinIdBox, 4)
-createStroke(JoinIdBox, COLORS.Border, 1)
-
-JoinIdBox.FocusLost:Connect(function(enter)
-    if enter and JoinIdBox.Text ~= "" then
-        queueAutoExecute()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, JoinIdBox.Text, LocalPlayer)
-    end
-end)
-
-local CopyIdBtn = makeActionBtn(ServerIdActions, "Copy ID")
-CopyIdBtn.Size = UDim2.new(0.3, 0, 1, 0)
-CopyIdBtn.MouseButton1Click:Connect(function()
-    if setclipboard then setclipboard(tostring(game.JobId)) end
-end)
-
-local UiActions = createSettingRow("Interface")
-local uiLayout = Instance.new("UIListLayout")
-uiLayout.FillDirection = Enum.FillDirection.Horizontal
-uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-uiLayout.Parent = UiActions
-
-local DestroyBtn = makeActionBtn(UiActions, "Destroy UI")
-DestroyBtn.MouseButton1Click:Connect(function() 
-    pcall(function() checkOut() end)
-    ScreenGui:Destroy() 
-end)
-
-local ThemeActions = createSettingRow("Theme Color")
-local themeLayout = Instance.new("UIListLayout")
-themeLayout.FillDirection = Enum.FillDirection.Horizontal
-themeLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-themeLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-themeLayout.Padding = UDim.new(0, 8)
-themeLayout.Parent = ThemeActions
-
-local HexInput = Instance.new("TextBox")
-HexInput.Size = UDim2.new(0, 70, 1, 0)
-HexInput.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-HexInput.Text = CurrentThemeHex
-HexInput.TextColor3 = COLORS.White
-HexInput.Font = FONTS.Bold
-HexInput.TextSize = 12
-HexInput.Parent = ThemeActions
-createCorner(HexInput, 4)
-createStroke(HexInput, COLORS.Border, 1)
-
-local PresetColors = {
-    Color3.fromRGB(229, 9, 20),
-    Color3.fromRGB(0, 120, 255),
-    Color3.fromRGB(0, 255, 127),
-    Color3.fromRGB(138, 43, 226),
-    Color3.fromRGB(255, 215, 0)
-}
 
 local function updateDynamicThemeColors(newColor)
     COLORS.BrandRed = newColor
@@ -1960,22 +2206,6 @@ HexInput.FocusLost:Connect(function()
         local newColor = Color3.fromHex(HexInput.Text)
         applyNewTheme(newColor)
     end)
-end)
-
-for _, color in ipairs(PresetColors) do
-    local colorBtn = Instance.new("TextButton")
-    colorBtn.Size = UDim2.new(0, 24, 0, 24)
-    colorBtn.BackgroundColor3 = color
-    colorBtn.Text = ""
-    colorBtn.Parent = ThemeActions
-    createCorner(colorBtn, 12)
-    BindInteractionSounds(colorBtn)
-    colorBtn.MouseButton1Click:Connect(function() applyNewTheme(color) end)
-end
-
-SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 20)
-SettingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 20)
 end)
 
 local currentIndex = 1
@@ -2364,12 +2594,12 @@ local function applyOverheadTag(player)
     textConstraint.Parent = textLabel
     textLabel.Parent = frame
 
-    local role = "AN Hub User"
-    if player.UserId == CREATOR_ID then 
-        role = "AN Founder" 
-    elseif player.UserId == CO_FOUNDER_ID then
-        role = "AN Co-Founder"
-        
+    local role = "AN_Users"
+    local rank = GetUserRank(player.UserId)
+    if rank == 4 then 
+        role = "AN_Founder" 
+    elseif rank == 3 then
+        role = "AN_Co-founder"
         local gradient = Instance.new("UIGradient")
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
@@ -2378,13 +2608,19 @@ local function applyOverheadTag(player)
         })
         gradient.Rotation = 45
         gradient.Parent = textLabel
-        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Gradient = gradient }
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Gradient = gradient, Rank = rank }
+    elseif rank == 2 then
+        role = "AN_Admin"
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Rank = rank }
+    else
+        role = "AN_Users"
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Rank = rank }
     end
     
     textLabel.Text = role
     
     if not ActiveTags[player] then
-        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId }
+        ActiveTags[player] = { Gui = bill, TextLabel = textLabel, Stroke = tagStroke, UserId = player.UserId, Rank = rank }
     end
 end
 
@@ -2404,7 +2640,6 @@ task.spawn(function()
                 FirebaseActiveUsers = {}
                 if activeUsers then
                     for userIdStr, info in pairs(activeUsers) do
-                        -- Only add if their heartbeat is active (within the last 60 seconds)
                         if info.timestamp and (currentTime - info.timestamp) <= 60 then
                             FirebaseActiveUsers[userIdStr] = info
                             table.insert(userNames, info.username)
@@ -2446,7 +2681,6 @@ task.spawn(function()
                         pBtn.Parent = PlayersScroll
                         createCorner(pBtn, 4)
                         createStroke(pBtn, COLORS.Border, 1, 0.5)
-            
                         BindInteractionSounds(pBtn)
                         
                         pBtn.MouseEnter:Connect(function()
@@ -2455,7 +2689,7 @@ task.spawn(function()
                         pBtn.MouseLeave:Connect(function()
                             TweenService:Create(pBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(20, 20, 20), TextColor3 = COLORS.GreyLight}):Play()
                         end)
-            
+                        
                         pBtn.MouseButton1Click:Connect(function()
                             if setclipboard then
                                 setclipboard(userIdStr)
@@ -2518,16 +2752,23 @@ RunService.Heartbeat:Connect(function()
     for player, data in pairs(ActiveTags) do
         pcall(function()
             if data.Gui and data.TextLabel then
-                if data.UserId == CREATOR_ID then
+                if data.Rank == 4 or data.UserId == CREATOR_ID then
                     local formula = (math.sin(clock * 4.5) + 1) / 2
                     local customRed = Color3.fromRGB(229, 9, 20)
                     local customBlack = Color3.fromRGB(15, 15, 15)
                     local lerpedColor = customBlack:Lerp(customRed, formula)
                     data.TextLabel.TextColor3 = lerpedColor
                     data.Stroke.Color = lerpedColor
-                elseif data.UserId == CO_FOUNDER_ID and data.Gradient then
-                    data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0)
+                elseif data.Rank == 3 or (data.UserId == CO_FOUNDER_ID and data.Gradient) then
+                    if data.Gradient then data.Gradient.Offset = Vector2.new(math.sin(clock * 1.5), 0) end
                     data.Stroke.Color = Color3.fromRGB(255, 215, 0)
+                elseif data.Rank == 2 then
+                    local formula = (math.sin(clock * 3.5) + 1) / 2
+                    local neonAdmin = Color3.fromRGB(180, 0, 255)
+                    local dimAdmin = Color3.fromRGB(40, 0, 60)
+                    local lerpedAdmin = dimAdmin:Lerp(neonAdmin, formula)
+                    data.TextLabel.TextColor3 = lerpedAdmin
+                    data.Stroke.Color = lerpedAdmin
                 else
                     local formula = (math.sin(clock * 3) + 1) / 2
                     local neonBase = Color3.fromRGB(0, 220, 255)
@@ -2539,13 +2780,25 @@ RunService.Heartbeat:Connect(function()
             end
         end)
     end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if LoopKillTargets[player.UserId] and player.Character then
+            local hum = player.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then hum.Health = 0 end
+        end
+        if SpinTargets[player.UserId] and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(25), 0)
+            end
+        end
+    end
 end)
 
 updateDynamicThemeColors(CurrentThemeColor)
-playIntroAnimation()
 
 if isUserBlacklisted then
-    warn("AN Hub: Access Denied. Time Remaining: " .. banTimeText)
+    warn("AN Hub: Access Denied.\nTime Remaining: " .. banTimeText)
     
     MenuFrame:Destroy()
     HeaderBar:Destroy()
@@ -2578,7 +2831,6 @@ if isUserBlacklisted then
         ScreenGui:Destroy()
     end)
 else
-    
     checkIn()
     routeToView("menu")
     updateTabLine(MoviesTab)
