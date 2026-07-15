@@ -20,7 +20,7 @@ local BASE_URL = "https://anuni-21a0e-default-rtdb.firebaseio.com/"
 local http_request = request or http_request or (syn and syn.request)
 
 local CREATOR_ID = 1494561843
-local CO_FOUNDER_ID = 0
+local CO_FOUNDER_ID = 11084026865
 local function IsAdmin(userId)
     return userId == CREATOR_ID or userId == CO_FOUNDER_ID
 end
