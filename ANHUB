@@ -107,7 +107,7 @@ local SOUND_URLS = {
     Click = "https://github.com/Fe-ProjectR/GAME-IMAGES/raw/refs/heads/main/666herohero-click-21156.mp3"
 }
 
-local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json"
+local CLOUD_MOVIES_URL = "https://raw.githubusercontent.com/GUICLOUDS/CloudStorage/refs/heads/main/movies.json?nocache=" .. os.time()
 local isUserBlacklisted = false
 local banTimeText = ""
 
