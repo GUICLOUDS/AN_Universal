@@ -1,3 +1,108 @@
+local FIRST_TIME_FILE = "AN/NFX_FirstTimeExecuted.txt"
+local isFirstTime = true
+
+pcall(function()
+    if isfile and isfile(FIRST_TIME_FILE) then
+        isFirstTime = false
+    end
+end)
+
+if isFirstTime then
+    local WelcomeGui = Instance.new("ScreenGui")
+    WelcomeGui.Name = "AN_BetaWelcome"
+    WelcomeGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    WelcomeGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local MainPanel = Instance.new("Frame")
+    MainPanel.Size = UDim2.new(0, 0, 0, 0) 
+    MainPanel.Position = UDim2.new(0.5, 0, 0.5, 0)
+    MainPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainPanel.BackgroundColor3 = COLORS.DarkBack
+    MainPanel.BorderSizePixel = 0
+    MainPanel.ClipsDescendants = true
+    MainPanel.ZIndex = 999
+    MainPanel.Parent = WelcomeGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = MainPanel
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = COLORS.BrandRed
+    stroke.Thickness = 2
+    stroke.Parent = MainPanel
+
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.Position = UDim2.new(0, 0, 0, 20)
+    Title.BackgroundTransparency = 1
+    Title.Text = "Welcome to AN UNIVERSAL (BETA)"
+    Title.TextColor3 = COLORS.BrandRed
+    Title.Font = FONTS.Heavy
+    Title.TextSize = 18
+    Title.ZIndex = 1000
+    Title.Parent = MainPanel
+
+    local Desc = Instance.new("TextLabel")
+    Desc.Size = UDim2.new(1, -60, 0, 70)
+    Desc.Position = UDim2.new(0, 30, 0, 65)
+    Desc.BackgroundTransparency = 1
+    Desc.Text = "This script is currently new and still in beta! If you enjoy using it, please consider showcasing it to help us gain popularity."
+    Desc.TextColor3 = COLORS.White
+    Desc.Font = FONTS.Medium
+    Desc.TextSize = 14
+    Desc.TextWrapped = true
+    Desc.ZIndex = 1000
+    Desc.Parent = MainPanel
+
+    local AlrightBtn = Instance.new("TextButton")
+    AlrightBtn.Size = UDim2.new(0, 120, 0, 35)
+    AlrightBtn.Position = UDim2.new(0.5, -60, 1, -55)
+    AlrightBtn.BackgroundColor3 = COLORS.BrandRed
+    AlrightBtn.Text = "Alright!"
+    AlrightBtn.TextColor3 = COLORS.White
+    AlrightBtn.Font = FONTS.Bold
+    AlrightBtn.TextSize = 14
+    AlrightBtn.AutoButtonColor = false
+    AlrightBtn.ZIndex = 1000
+    AlrightBtn.Parent = MainPanel
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = AlrightBtn
+    
+    AlrightBtn.MouseEnter:Connect(function() 
+        TweenService:Create(AlrightBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(math.max(0, COLORS.BrandRed.R * 255 - 40), math.max(0, COLORS.BrandRed.G * 255 - 40), math.max(0, COLORS.BrandRed.B * 255 - 40))}):Play() 
+    end)
+    AlrightBtn.MouseLeave:Connect(function() 
+        TweenService:Create(AlrightBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.BrandRed}):Play() 
+    end)
+
+    TweenService:Create(MainPanel, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 420, 0, 210)
+    }):Play()
+
+    AlrightBtn.MouseButton1Click:Connect(function()
+        -- Create the "AN" folder if it doesn't exist, and save the file so this UI never shows again
+        pcall(function()
+            if makefolder and not isfolder("AN") then 
+                makefolder("AN") 
+            end
+            if writefile then 
+                writefile(FIRST_TIME_FILE, "User has seen the beta showcase message.") 
+            end
+        end)
+
+        local closeTween = TweenService:Create(MainPanel, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0)
+        })
+        closeTween:Play()
+        
+        closeTween.Completed:Wait()
+        WelcomeGui:Destroy()
+    end)
+end
+
 local IMAGE_URLS = {
     IntroLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled230_20260713073832.png",
     PillLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/1000043901.png"
