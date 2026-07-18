@@ -513,8 +513,15 @@ local function getTargetSize()
     local viewport = Camera.ViewportSize
     local width = WindowConfig.Width
     local height = WindowConfig.Height
-    if isMobile() or viewport.X < 750 then
-        local scale = math.clamp(viewport.X / 750, 0.6, 0.9)
+    
+    -- Mobile & smaller screen optimization
+    if isMobile() then
+        -- For mobile: use 40-85% of screen width for better button spacing
+        local scale = math.clamp(viewport.X / 1200, 0.4, 0.85)
+        return UDim2.new(0, width * scale, 0, height * scale)
+    elseif viewport.X < 750 then
+        -- For small desktop screens
+        local scale = math.clamp(viewport.X / 750, 0.5, 0.85)
         return UDim2.new(0, width * scale, 0, height * scale)
     end
     return UDim2.new(0, width, 0, height)
@@ -833,7 +840,7 @@ do
     MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
     MinimizeBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
     MinimizeBtn.BorderSizePixel = 0
-    MinimizeBtn.Text = "—"
+    MinimizeBtn.Text = "-"
     MinimizeBtn.TextColor3 = COLORS.GreyLight
     MinimizeBtn.Font = FONTS.Bold
     MinimizeBtn.TextSize = 12
@@ -1117,8 +1124,8 @@ local function makeArrow(name, alignRight, symbol)
     return btn
 end
 
-local LeftArrow = makeArrow("LeftArrow", false, "‹")
-local RightArrow = makeArrow("RightArrow", true, "›")
+local LeftArrow = makeArrow("LeftArrow", false, "<")
+local RightArrow = makeArrow("RightArrow", true, ">")
 
 local MovieCarousel = Instance.new("Frame")
 MovieCarousel.Name = "MovieCarousel"
@@ -1231,11 +1238,11 @@ do
     DetailTagsLayout.Parent = TagsDetailScroll
 
     DetailDescription.Name = "DetailDescription"
-    DetailDescription.Size = UDim2.new(1, 0, 1, -150)
+    DetailDescription.Size = UDim2.new(1, 0, 1, -170)  -- Reduced height to ensure buttons are visible
     DetailDescription.Position = UDim2.new(0, 0, 0, 95)
     DetailDescription.BackgroundTransparency = 1
     DetailDescription.TextColor3 = COLORS.GreyLight
-    DetailDescription.TextSize = 13
+    DetailDescription.TextSize = 12
     DetailDescription.Font = FONTS.Book
     DetailDescription.TextXAlignment = Enum.TextXAlignment.Left
     DetailDescription.TextYAlignment = Enum.TextYAlignment.Top
@@ -1244,8 +1251,8 @@ do
 
     local ButtonRow = Instance.new("Frame")
     ButtonRow.Name = "ButtonRow"
-    ButtonRow.Size = UDim2.new(1, 0, 0, 44)
-    ButtonRow.Position = UDim2.new(0, 0, 1, -54)
+    ButtonRow.Size = UDim2.new(1, 0, 0, 48)
+    ButtonRow.Position = UDim2.new(0, 0, 1, -62)  -- Increased padding to ensure visibility on mobile
     ButtonRow.BackgroundTransparency = 1
     ButtonRow.Parent = InfoPanel
 
@@ -1255,11 +1262,11 @@ do
     ButtonLayout.Parent = ButtonRow
 
     PlayBtn.Name = "PlayBtn"
-    PlayBtn.Size = UDim2.new(0, 120, 1, 0)
+    PlayBtn.Size = UDim2.new(0.35, -6, 1, 0)  -- Responsive width instead of fixed 120px
     PlayBtn.BackgroundColor3 = COLORS.BrandRed
     PlayBtn.Text = "Execute"
     PlayBtn.Font = FONTS.Bold
-    PlayBtn.TextSize = 14
+    PlayBtn.TextSize = 13
     PlayBtn.TextColor3 = COLORS.White
     PlayBtn.AutoButtonColor = false
     PlayBtn.Parent = ButtonRow
@@ -1267,11 +1274,11 @@ do
     BindInteractionSounds(PlayBtn)
 
     FavBtn.Name = "FavBtn"
-    FavBtn.Size = UDim2.new(0, 100, 1, 0)
+    FavBtn.Size = UDim2.new(0.3, -6, 1, 0)  -- Responsive width
     FavBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     FavBtn.Text = "+ My List"
     FavBtn.Font = FONTS.Bold
-    FavBtn.TextSize = 12
+    FavBtn.TextSize = 11
     FavBtn.TextColor3 = COLORS.White
     FavBtn.AutoButtonColor = false
     FavBtn.Parent = ButtonRow
@@ -1283,11 +1290,11 @@ do
     FavBtn.MouseLeave:Connect(function() TweenService:Create(FavBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(35, 35, 35)}):Play() end)
 
     BackBtn.Name = "BackBtn"
-    BackBtn.Size = UDim2.new(0, 90, 1, 0)
+    BackBtn.Size = UDim2.new(0.25, -6, 1, 0)  -- Responsive width
     BackBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     BackBtn.Text = "Back"
     BackBtn.Font = FONTS.Bold
-    BackBtn.TextSize = 14
+    BackBtn.TextSize = 12
     BackBtn.TextColor3 = COLORS.White
     BackBtn.AutoButtonColor = false
     BackBtn.Parent = ButtonRow
