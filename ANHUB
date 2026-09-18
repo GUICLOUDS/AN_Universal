@@ -2775,6 +2775,7 @@ do
         colorBtn.Size = UDim2.new(0, 24, 0, 24)
         colorBtn.BackgroundColor3 = color
         colorBtn.Text = ""
+        colorBtn:SetAttribute("ANThemePreset", true)
         colorBtn.Parent = ThemeActions
         createCorner(colorBtn, 12)
         BindInteractionSounds(colorBtn)
@@ -2916,12 +2917,18 @@ updateDynamicThemeColors = function(newColor)
         for _, object in ipairs(ScreenGui:GetDescendants()) do
             pcall(function()
                 if object:IsA("GuiObject") then
-                    if object.BackgroundColor3 == oldColor then object.BackgroundColor3 = newColor end
-                    if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-                        if object.TextColor3 == oldColor then object.TextColor3 = newColor end
-                    end
-                    if object:IsA("ImageLabel") or object:IsA("ImageButton") then
-                        if object.ImageColor3 == oldColor then object.ImageColor3 = newColor end
+                    local isThemePreset = false
+                    pcall(function()
+                        isThemePreset = object:GetAttribute("ANThemePreset") == true
+                    end)
+                    if not isThemePreset then
+                        if object.BackgroundColor3 == oldColor then object.BackgroundColor3 = newColor end
+                        if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+                            if object.TextColor3 == oldColor then object.TextColor3 = newColor end
+                        end
+                        if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+                            if object.ImageColor3 == oldColor then object.ImageColor3 = newColor end
+                        end
                     end
                 elseif object:IsA("UIStroke") then
                     if object.Color == oldColor then object.Color = newColor end
