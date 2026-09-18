@@ -12,7 +12,28 @@ local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local TextService = game:GetService("TextService")
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Camera = workspace.CurrentCamera
+
+local AN_ENV = (getgenv and getgenv()) or _G
+if type(AN_ENV.AN_UNIVERSAL_CLEANUP) == "function" then
+    pcall(AN_ENV.AN_UNIVERSAL_CLEANUP)
+end
+if AN_ENV.AN_UNIVERSAL_GUI then
+    pcall(function()
+        if AN_ENV.AN_UNIVERSAL_GUI.Parent then
+            AN_ENV.AN_UNIVERSAL_GUI:Destroy()
+        end
+    end)
+end
+for _, existingGui in ipairs(PlayerGui:GetChildren()) do
+    if existingGui:IsA("ScreenGui") and existingGui.Name == "ANMenutwin" then
+        pcall(function() existingGui:Destroy() end)
+    end
+end
+local AN_EXECUTION_TOKEN = tostring(os.time()) .. ":" .. tostring(math.random(100000, 999999))
+AN_ENV.AN_UNIVERSAL_SESSION = AN_EXECUTION_TOKEN
+AN_ENV.AN_UNIVERSAL_GUI = nil
 
 local JobId = game.JobId
 if JobId == "" then JobId = "TestServer" end
@@ -195,7 +216,7 @@ end
 local function checkIn()
     if not http_request then return end
     task.spawn(function()
-        while true do
+        while AN_ENV.AN_UNIVERSAL_SESSION == AN_EXECUTION_TOKEN do
             local userUrl = BASE_URL .. "active_users/" .. JobId .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
             local data = HttpService:JSONEncode({
                 username = LocalPlayer.Name,
@@ -332,7 +353,17 @@ local Favorites = {}
 
 pcall(function()
     if isfile and readfile and isfile(FAVORITES_FILE) then
-        Favorites = HttpService:JSONDecode(readfile(FAVORITES_FILE))
+        local decoded = HttpService:JSONDecode(readfile(FAVORITES_FILE))
+        if type(decoded) == "table" then
+            for _, entry in ipairs(decoded) do
+                if type(entry) == "string" then
+                    table.insert(Favorites, {Kind = "movie", Title = entry})
+                elseif type(entry) == "table" and entry.Title then
+                    entry.Kind = entry.Kind or "movie"
+                    table.insert(Favorites, entry)
+                end
+            end
+        end
     end
 end)
 
@@ -342,19 +373,89 @@ local function saveFavorites()
     end)
 end
 
+function findFavoriteIndex(title, kind)
+    title = tostring(title or "")
+    kind = kind or "movie"
+    for i, entry in ipairs(Favorites) do
+        if type(entry) == "table" and tostring(entry.Title or "") == title and (entry.Kind or "movie") == kind then
+            return i
+        end
+    end
+    return nil
+end
+
 local function isFavorite(movieTitle)
-    return table.find(Favorites, movieTitle) ~= nil
+    return findFavoriteIndex(movieTitle, "movie") ~= nil
 end
 
 local function toggleFavorite(movieTitle)
-    local index = table.find(Favorites, movieTitle)
+    local index = findFavoriteIndex(movieTitle, "movie")
     if index then
         table.remove(Favorites, index)
     else
-        table.insert(Favorites, movieTitle)
+        table.insert(Favorites, {Kind = "movie", Title = movieTitle})
     end
     saveFavorites()
 end
+
+function isPiratedFavorite(title)
+    return findFavoriteIndex(title, "pirated") ~= nil
+end
+
+function togglePiratedFavorite(scriptData, comments)
+    if not scriptData then return end
+    local title = tostring(scriptData.title or "Untitled Script")
+    local index = findFavoriteIndex(title, "pirated")
+    if index then
+        table.remove(Favorites, index)
+    else
+        local tagsCopy = {}
+        if type(scriptData.tags) == "table" then
+            for _, tag in ipairs(scriptData.tags) do table.insert(tagsCopy, tostring(tag)) end
+        end
+        local commentCopy = {}
+        if type(comments) == "table" then
+            for _, comment in ipairs(comments) do table.insert(commentCopy, comment) end
+        end
+        table.insert(Favorites, {
+            Kind = "pirated",
+            Title = title,
+            Script = type(scriptData.script) == "string" and scriptData.script or "",
+            Image = scriptData.image or (scriptData.game and scriptData.game.imageUrl) or "",
+            Game = scriptData.game,
+            Description = scriptData.features or scriptData.description or "No description provided.",
+            Likes = tonumber(scriptData.likeCount) or 0,
+            Dislikes = tonumber(scriptData.dislikeCount) or 0,
+            Views = tonumber(scriptData.views) or 0,
+            Owner = scriptData.owner and scriptData.owner.username or "Unknown",
+            UpdatedAt = scriptData.updatedAt,
+            CreatedAt = scriptData.createdAt,
+            Tags = tagsCopy,
+            Verified = scriptData.verified == true,
+            Key = scriptData.key == true,
+            Universal = scriptData.isUniversal == true,
+            Patched = scriptData.isPatched == true,
+            ScriptType = scriptData.scriptType,
+            Visibility = scriptData.visibility,
+            Slug = scriptData.slug,
+            Id = scriptData._id,
+            Comments = commentCopy
+        })
+    end
+    saveFavorites()
+end
+
+function getSavedPiratedEntries()
+    local entries = {}
+    for _, entry in ipairs(Favorites) do
+        if type(entry) == "table" and (entry.Kind == "pirated") then
+            table.insert(entries, entry)
+        end
+    end
+    return entries
+end
+
+saveFavorites()
 
 local CONFIG_FILE = "AN/NFX_Settings.json"
 local Settings = { ShowTags = true }
@@ -395,8 +496,104 @@ pcall(function()
 end)
 
 local CurrentThemeColor = Color3.fromHex(CurrentThemeHex)
+local updateDynamicThemeColors
+local applyNewTheme
+local PiratedImageFiles = {}
+local PiratedImageGeneration = 0
 
-local function LoadImageAsync(imageLabel, url, skipFade)
+local function getImageExtensionFromContentType(contentType)
+    contentType = tostring(contentType or ""):lower():match("^[^;]+") or ""
+    local map = {
+        ["image/png"] = "png",
+        ["image/jpeg"] = "jpg",
+        ["image/jpg"] = "jpg",
+        ["image/webp"] = "webp",
+        ["image/gif"] = "gif",
+        ["image/bmp"] = "bmp",
+        ["image/x-bmp"] = "bmp"
+    }
+    return map[contentType]
+end
+
+local function getImageExtensionFromUrl(url)
+    local cleanUrl = tostring(url or ""):match("^[^?#]+") or tostring(url or "")
+    local ext = cleanUrl:match("%.([%a%d]+)$")
+    if ext then
+        ext = ext:lower()
+        if ext == "jpeg" then ext = "jpg" end
+        if ext == "png" or ext == "jpg" or ext == "webp" or ext == "gif" or ext == "bmp" then
+            return ext
+        end
+    end
+    return nil
+end
+
+local function getImageExtensionFromBytes(data)
+    if type(data) ~= "string" or data == "" then return nil end
+    if data:sub(1, 8) == "\137PNG\r\n\26\n" then return "png" end
+    if data:sub(1, 3) == "\255\216\255" then return "jpg" end
+    if data:sub(1, 4) == "RIFF" and data:sub(9, 12) == "WEBP" then return "webp" end
+    if data:sub(1, 4) == "GIF8" then return "gif" end
+    if data:sub(1, 2) == "BM" then return "bmp" end
+    return nil
+end
+
+local function getImageCacheData(url)
+    if http_request then
+        local ok, response = pcall(function()
+            return http_request({Url = url, Method = "GET"})
+        end)
+        if ok and response and response.Body then
+            local statusCode = tonumber(response.StatusCode or response.status_code or response.Status)
+            if not statusCode or (statusCode >= 200 and statusCode < 300) then
+                local headers = response.Headers or response.headers or {}
+                local contentType = headers["Content-Type"] or headers["content-type"] or headers["CONTENT-TYPE"]
+                local body = response.Body
+                return body, getImageExtensionFromContentType(contentType) or getImageExtensionFromBytes(body)
+            end
+        end
+    end
+
+    local ok, data = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok and data then
+        return data, getImageExtensionFromBytes(data)
+    end
+    return nil, nil
+end
+
+local function safeImageCacheName(url)
+    local safeUrl = tostring(url or ""):gsub("[^%w]", "")
+    if #safeUrl > 64 then safeUrl = safeUrl:sub(-64) end
+    if safeUrl == "" then safeUrl = "image" end
+    return safeUrl
+end
+
+local function clearPiratedImageCache()
+    PiratedImageGeneration = PiratedImageGeneration + 1
+    for filePath in pairs(PiratedImageFiles) do
+        pcall(function()
+            if delfile and isfile and isfile(filePath) then delfile(filePath) end
+        end)
+    end
+    PiratedImageFiles = {}
+
+    pcall(function()
+        if listfiles and delfile and isfile then
+            for _, filePath in ipairs(listfiles("AN")) do
+                local normalized = tostring(filePath):gsub("\\", "/")
+                if normalized:match("^AN/NFX_PIRATED_IMG_") then
+                    if isfile(filePath) then delfile(filePath) end
+                end
+            end
+        end
+    end)
+end
+
+clearPiratedImageCache()
+
+local function LoadImageAsync(imageLabel, url, skipFade, temporaryPirated)
     if not url or url == "" then return end
     if not skipFade then imageLabel.ImageTransparency = 1 end
     if not (url:find("^http://") or url:find("^https://")) then
@@ -405,22 +602,50 @@ local function LoadImageAsync(imageLabel, url, skipFade)
         return
     end
 
+    local imageGeneration = PiratedImageGeneration
     task.spawn(function()
         local getAsset = getcustomasset or getsynasset
         if not (writefile and isfile and getAsset) then return end
 
-        local safeUrl = url:gsub("[^%w]", "")
-        if #safeUrl > 40 then safeUrl = safeUrl:sub(#safeUrl - 40) end
-        local filePath = "AN/NFX_IMG_" .. safeUrl .. ".png"
+        local hintedExtension = getImageExtensionFromUrl(url)
+        local safeName = safeImageCacheName(url)
+        local prefix = temporaryPirated and "AN/NFX_PIRATED_IMG_" or "AN/NFX_IMG_"
+        local filePath = nil
+        local data = nil
+        local detectedExtension = nil
 
-        if not isfile(filePath) then
-            local success, data = pcall(function() return game:HttpGet(url) end)
-            if success and data then writefile(filePath, data) else return end
+        if temporaryPirated and imageGeneration ~= PiratedImageGeneration then return end
+
+        if hintedExtension then
+            filePath = prefix .. safeName .. "." .. hintedExtension
         end
 
-        if isfile(filePath) then
-            imageLabel.Image = getAsset(filePath)
-            if not skipFade then TweenService:Create(imageLabel, TweenInfo.new(0.4), {ImageTransparency = 0}):Play() end
+        if not filePath or not isfile(filePath) then
+            data, detectedExtension = getImageCacheData(url)
+            if not data then return end
+            local extension = detectedExtension or hintedExtension or "png"
+            filePath = prefix .. safeName .. "." .. extension
+            if temporaryPirated and imageGeneration ~= PiratedImageGeneration then return end
+            local wrote = pcall(function() writefile(filePath, data) end)
+            if not wrote then return end
+        end
+
+        if temporaryPirated then
+            if imageGeneration ~= PiratedImageGeneration then
+                pcall(function()
+                    if delfile and isfile and isfile(filePath) then delfile(filePath) end
+                end)
+                return
+            end
+            PiratedImageFiles[filePath] = true
+        end
+
+        if isfile(filePath) and imageLabel and imageLabel.Parent then
+            local ok, asset = pcall(function() return getAsset(filePath) end)
+            if ok and asset then
+                imageLabel.Image = asset
+                if not skipFade then TweenService:Create(imageLabel, TweenInfo.new(0.4), {ImageTransparency = 0}):Play() end
+            end
         end
     end)
 end
@@ -532,7 +757,20 @@ ScreenGui.Name = "ANMenutwin"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.Parent = PlayerGui
+AN_ENV.AN_UNIVERSAL_GUI = ScreenGui
+AN_ENV.AN_UNIVERSAL_CLEANUP = function()
+    pcall(function()
+        if AN_ENV.AN_UNIVERSAL_GUI == ScreenGui then
+            AN_ENV.AN_UNIVERSAL_GUI = nil
+        end
+    end)
+    pcall(function() clearPiratedImageCache() end)
+    pcall(function() checkOut() end)
+    pcall(function()
+        if ScreenGui.Parent then ScreenGui:Destroy() end
+    end)
+end
 
 local function ShowNetflixNotification(title, desc)
     local NotifFrame = Instance.new("Frame")
@@ -793,6 +1031,7 @@ end
 
 local MoviesTab = makeTextTab("Movies", 55)
 local ExecutorTab = makeTextTab("Director's Cut", 100)
+local PiratedTab = makeTextTab("Pirated", 60)
 local SettingsTab = makeTextTab("Settings", 65)
 local CreditsTab = makeTextTab("Credits", 55)
 local AdminTab
@@ -808,7 +1047,7 @@ local function updateTabLine(targetTab)
         Position = UDim2.new(0, relativeX, 0, 46)
     }):Play()
     
-    local allTabs = {MoviesTab, ExecutorTab, SettingsTab, CreditsTab}
+    local allTabs = {MoviesTab, ExecutorTab, PiratedTab, SettingsTab, CreditsTab}
     if AdminTab then table.insert(allTabs, AdminTab) end
     
     for _, otherTab in ipairs(allTabs) do
@@ -1305,10 +1544,241 @@ do
     BackBtn.MouseLeave:Connect(function() TweenService:Create(BackBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play() end)
 end
 
+local routeToView
+
 local ExecutorFrame = Instance.new("Frame")
 local CodeInput = Instance.new("TextBox")
 local ExecActionBtn = Instance.new("TextButton")
 local ExecClearBtn = Instance.new("TextButton")
+
+-- ============================================================================
+-- DIRECTOR'S CUT / PERSISTENT SCRIPT TABS
+-- ============================================================================
+local DirectorState = {
+    File = "AN/NFX_DirectorTabs.json",
+    Tabs = {},
+    Active = 1,
+    Token = 0,
+    Buttons = {},
+    Scroller = nil,
+    RenameBox = nil,
+    Status = nil,
+    NewButton = nil
+}
+
+function ensureDirectorFolder()
+    pcall(function()
+        if makefolder and isfolder and not isfolder("AN") then
+            makefolder("AN")
+        end
+    end)
+end
+
+ensureDirectorFolder()
+
+function safeTabName(name)
+    name = tostring(name or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    name = name:gsub("[\\/:*?\"<>|]", "")
+    if name == "" then name = "Script" end
+    return name:sub(1, 48)
+end
+
+function makeUniqueDirectorName(name, ignoreIndex)
+    local base = safeTabName(name)
+    local candidate = base
+    local suffix = 2
+    while true do
+        local taken = false
+        for i, tab in ipairs(DirectorState.Tabs) do
+            if i ~= ignoreIndex and tostring(tab.Name or ""):lower() == candidate:lower() then
+                taken = true
+                break
+            end
+        end
+        if not taken then return candidate end
+        candidate = base .. " (" .. suffix .. ")"
+        suffix = suffix + 1
+    end
+end
+
+function saveDirectorTabs()
+    DirectorState.Token = DirectorState.Token + 1
+    pcall(function()
+        if writefile then
+            writefile(DirectorState.File, HttpService:JSONEncode(DirectorState.Tabs))
+        end
+    end)
+end
+
+function loadDirectorTabs()
+    DirectorState.Tabs = {}
+    pcall(function()
+        if isfile and readfile and isfile(DirectorState.File) then
+            local decoded = HttpService:JSONDecode(readfile(DirectorState.File))
+            if type(decoded) == "table" then
+                for _, tab in ipairs(decoded) do
+                    if type(tab) == "table" then
+                        local name = safeTabName(tab.Name or tab.Title or "Script")
+                        local source = type(tab.Script) == "string" and tab.Script or ""
+                        table.insert(DirectorState.Tabs, {Name = name, Script = source})
+                    end
+                end
+            end
+        end
+    end)
+    if #DirectorState.Tabs == 0 then
+        DirectorState.Tabs = {{Name = "Script 1", Script = ""}}
+        saveDirectorTabs()
+    end
+    DirectorState.Active = math.clamp(DirectorState.Active, 1, #DirectorState.Tabs)
+end
+
+loadDirectorTabs()
+
+function currentDirectorTab()
+    return DirectorState.Tabs[DirectorState.Active]
+end
+
+function saveActiveDirectorTab()
+    local tab = currentDirectorTab()
+    if tab and CodeInput then
+        tab.Script = CodeInput.Text
+        saveDirectorTabs()
+    end
+end
+
+function queueDirectorAutosave()
+    DirectorState.Token = DirectorState.Token + 1
+    local token = DirectorState.Token
+    task.delay(0.35, function()
+        if token == DirectorState.Token then
+            saveActiveDirectorTab()
+            if DirectorState.Status then
+                DirectorState.Status.Text = "Saved"
+                task.delay(0.8, function()
+                    if DirectorState.Status then DirectorState.Status.Text = "Auto-saved to AN/NFX_DirectorTabs.json" end
+                end)
+            end
+        end
+    end)
+end
+
+function refreshDirectorTabButtons()
+    if not DirectorState.Scroller then return end
+    for _, child in ipairs(DirectorState.Scroller:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    DirectorState.Buttons = {}
+
+    for index, tab in ipairs(DirectorState.Tabs) do
+        local holder = Instance.new("Frame")
+        holder.Name = "DirectorTab_" .. index
+        holder.Size = UDim2.new(0, isMobile() and 112 or 138, 0, 30)
+        holder.BackgroundColor3 = (index == DirectorState.Active) and Color3.fromRGB(38, 38, 38) or Color3.fromRGB(22, 22, 22)
+        holder.BorderSizePixel = 0
+        holder.Parent = DirectorState.Scroller
+        createCorner(holder, 5)
+        createStroke(holder, index == DirectorState.Active and COLORS.BrandRed or COLORS.Border, 1, index == DirectorState.Active and 0.1 or 0.5)
+
+        local selectBtn = Instance.new("TextButton")
+        selectBtn.Size = UDim2.new(1, -30, 1, 0)
+        selectBtn.BackgroundTransparency = 1
+        selectBtn.Text = tostring(tab.Name or ("Script " .. index))
+        selectBtn.TextColor3 = index == DirectorState.Active and COLORS.White or COLORS.GreyLight
+        selectBtn.Font = FONTS.Bold
+        selectBtn.TextSize = 11
+        selectBtn.TextXAlignment = Enum.TextXAlignment.Left
+        selectBtn.TextTruncate = Enum.TextTruncate.AtEnd
+        selectBtn.AutoButtonColor = false
+        selectBtn.Parent = holder
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 9)
+        pad.PaddingRight = UDim.new(0, 4)
+        pad.Parent = selectBtn
+        BindInteractionSounds(selectBtn)
+
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.new(0, 28, 1, 0)
+        closeBtn.Position = UDim2.new(1, -28, 0, 0)
+        closeBtn.BackgroundTransparency = 1
+        closeBtn.Text = "×"
+        closeBtn.TextColor3 = COLORS.GreyMuted
+        closeBtn.Font = FONTS.Bold
+        closeBtn.TextSize = 16
+        closeBtn.AutoButtonColor = false
+        closeBtn.Parent = holder
+        BindInteractionSounds(closeBtn)
+
+        selectBtn.MouseButton1Click:Connect(function()
+            if index == DirectorState.Active then return end
+            saveActiveDirectorTab()
+            DirectorState.Active = index
+            local nextTab = currentDirectorTab()
+            CodeInput.Text = nextTab and nextTab.Script or ""
+            DirectorState.RenameBox.Text = nextTab and nextTab.Name or "Script"
+            refreshDirectorTabButtons()
+            if DirectorState.Status then DirectorState.Status.Text = "Switched · Auto-save ready" end
+        end)
+
+        closeBtn.MouseButton1Click:Connect(function()
+            if #DirectorState.Tabs <= 1 then return end
+            if index == DirectorState.Active then saveActiveDirectorTab() end
+            table.remove(DirectorState.Tabs, index)
+            if index == DirectorState.Active then
+                DirectorState.Active = math.clamp(index, 1, #DirectorState.Tabs)
+            elseif index < DirectorState.Active then
+                DirectorState.Active = DirectorState.Active - 1
+            end
+            local nextTab = currentDirectorTab()
+            CodeInput.Text = nextTab and nextTab.Script or ""
+            DirectorState.RenameBox.Text = nextTab and nextTab.Name or "Script"
+            saveDirectorTabs()
+            refreshDirectorTabButtons()
+        end)
+
+        DirectorState.Buttons[index] = holder
+    end
+
+    task.defer(function()
+        local layout = DirectorState.Scroller:FindFirstChildOfClass("UIListLayout")
+        if layout then
+            DirectorState.Scroller.CanvasSize = UDim2.new(0, layout.AbsoluteContentSize.X + 8, 0, 0)
+        end
+    end)
+end
+
+function createDirectorTab(name, source)
+    saveActiveDirectorTab()
+    local newName = makeUniqueDirectorName(name or ("Script " .. (#DirectorState.Tabs + 1)))
+    table.insert(DirectorState.Tabs, {Name = newName, Script = type(source) == "string" and source or ""})
+    DirectorState.Active = #DirectorState.Tabs
+    CodeInput.Text = DirectorState.Tabs[DirectorState.Active].Script
+    if DirectorState.RenameBox then DirectorState.RenameBox.Text = newName end
+    saveDirectorTabs()
+    refreshDirectorTabButtons()
+    return DirectorState.Tabs[DirectorState.Active]
+end
+
+function renameActiveDirectorTab(name)
+    local tab = currentDirectorTab()
+    if not tab then return end
+    local unique = makeUniqueDirectorName(name, DirectorState.Active)
+    tab.Name = unique
+    if DirectorState.RenameBox then DirectorState.RenameBox.Text = unique end
+    saveDirectorTabs()
+    refreshDirectorTabButtons()
+end
+
+function openScriptInDirectorTab(name, source)
+    if type(source) ~= "string" or source == "" then return false end
+    createDirectorTab(name, source)
+    routeToView("executor")
+    updateTabLine(ExecutorTab)
+    return true
+end
+
 
 do
     ExecutorFrame.Name = "ExecutorFrame"
@@ -1319,18 +1789,106 @@ do
     ExecutorFrame.Parent = MainFrame
 
     local ExecBody = Instance.new("Frame")
+    ExecBody.Name = "ExecBody"
     ExecBody.Size = UDim2.new(1, -36, 1, -24)
     ExecBody.Position = UDim2.new(0, 18, 0, 12)
     ExecBody.BackgroundTransparency = 1
     ExecBody.Parent = ExecutorFrame
 
-    CodeInput.Size = UDim2.new(1, 0, 1, -55)
-    CodeInput.Position = UDim2.new(0, 0, 0, 0)
+    local TabToolbar = Instance.new("Frame")
+    TabToolbar.Size = UDim2.new(1, 0, 0, 38)
+    TabToolbar.BackgroundTransparency = 1
+    TabToolbar.Parent = ExecBody
+
+    DirectorState.Scroller = Instance.new("ScrollingFrame")
+    DirectorState.Scroller.Name = "DirectorTabScroller"
+    DirectorState.Scroller.Size = UDim2.new(1, -92, 1, 0)
+    DirectorState.Scroller.Position = UDim2.new(0, 0, 0, 0)
+    DirectorState.Scroller.BackgroundTransparency = 1
+    DirectorState.Scroller.BorderSizePixel = 0
+    DirectorState.Scroller.ScrollBarThickness = 0
+    DirectorState.Scroller.ScrollingDirection = Enum.ScrollingDirection.X
+    DirectorState.Scroller.CanvasSize = UDim2.new(0, 0, 0, 0)
+    DirectorState.Scroller.Parent = TabToolbar
+
+    local DirectorTabLayout = Instance.new("UIListLayout")
+    DirectorTabLayout.FillDirection = Enum.FillDirection.Horizontal
+    DirectorTabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    DirectorTabLayout.Padding = UDim.new(0, 6)
+    DirectorTabLayout.Parent = DirectorState.Scroller
+    DirectorTabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        DirectorState.Scroller.CanvasSize = UDim2.new(0, DirectorTabLayout.AbsoluteContentSize.X + 8, 0, 0)
+    end)
+
+    DirectorState.NewButton = Instance.new("TextButton")
+    DirectorState.NewButton.Size = UDim2.new(0, 38, 0, 30)
+    DirectorState.NewButton.Position = UDim2.new(1, -38, 0.5, -15)
+    DirectorState.NewButton.BackgroundColor3 = COLORS.BrandRed
+    DirectorState.NewButton.Text = "+"
+    DirectorState.NewButton.TextColor3 = COLORS.White
+    DirectorState.NewButton.Font = FONTS.Bold
+    DirectorState.NewButton.TextSize = 18
+    DirectorState.NewButton.AutoButtonColor = false
+    DirectorState.NewButton.Parent = TabToolbar
+    createCorner(DirectorState.NewButton, 5)
+    BindInteractionSounds(DirectorState.NewButton)
+    DirectorState.NewButton.MouseButton1Click:Connect(function()
+        createDirectorTab()
+    end)
+
+    local RenameRow = Instance.new("Frame")
+    RenameRow.Size = UDim2.new(1, 0, 0, 30)
+    RenameRow.Position = UDim2.new(0, 0, 0, 43)
+    RenameRow.BackgroundTransparency = 1
+    RenameRow.Parent = ExecBody
+
+    DirectorState.RenameBox = Instance.new("TextBox")
+    DirectorState.RenameBox.Size = UDim2.new(1, -84, 1, 0)
+    DirectorState.RenameBox.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    DirectorState.RenameBox.TextColor3 = COLORS.White
+    DirectorState.RenameBox.PlaceholderText = "Tab name"
+    DirectorState.RenameBox.PlaceholderColor3 = COLORS.GreyMuted
+    DirectorState.RenameBox.Text = currentDirectorTab().Name
+    DirectorState.RenameBox.TextSize = 11
+    DirectorState.RenameBox.Font = FONTS.Medium
+    DirectorState.RenameBox.ClearTextOnFocus = false
+    DirectorState.RenameBox.TextXAlignment = Enum.TextXAlignment.Left
+    DirectorState.RenameBox.Parent = RenameRow
+    createCorner(DirectorState.RenameBox, 5)
+    createStroke(DirectorState.RenameBox, COLORS.Border, 1, 0.4)
+    local renamePad = Instance.new("UIPadding")
+    renamePad.PaddingLeft = UDim.new(0, 9)
+    renamePad.PaddingRight = UDim.new(0, 9)
+    renamePad.Parent = DirectorState.RenameBox
+
+    local RenameBtn = Instance.new("TextButton")
+    RenameBtn.Size = UDim2.new(0, 74, 1, 0)
+    RenameBtn.Position = UDim2.new(1, -74, 0, 0)
+    RenameBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    RenameBtn.Text = "Rename"
+    RenameBtn.TextColor3 = COLORS.White
+    RenameBtn.Font = FONTS.Bold
+    RenameBtn.TextSize = 11
+    RenameBtn.AutoButtonColor = false
+    RenameBtn.Parent = RenameRow
+    createCorner(RenameBtn, 5)
+    createStroke(RenameBtn, COLORS.Border, 1)
+    BindInteractionSounds(RenameBtn)
+    RenameBtn.MouseButton1Click:Connect(function()
+        renameActiveDirectorTab(DirectorState.RenameBox.Text)
+    end)
+    DirectorState.RenameBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then renameActiveDirectorTab(DirectorState.RenameBox.Text) end
+    end)
+
+    CodeInput.Name = "CodeInput"
+    CodeInput.Size = UDim2.new(1, 0, 1, -139)
+    CodeInput.Position = UDim2.new(0, 0, 0, 80)
     CodeInput.BackgroundColor3 = COLORS.DarkCard
-    CodeInput.Text = "print('Action!')"
+    CodeInput.Text = currentDirectorTab().Script
     CodeInput.TextColor3 = COLORS.GreyLight
     CodeInput.Font = Enum.Font.Code
-    CodeInput.TextSize = 13
+    CodeInput.TextSize = isMobile() and 12 or 13
     CodeInput.TextXAlignment = Enum.TextXAlignment.Left
     CodeInput.TextYAlignment = Enum.TextYAlignment.Top
     CodeInput.ClearTextOnFocus = false
@@ -1346,38 +1904,72 @@ do
     CodePadding.PaddingBottom = UDim.new(0, 10)
     CodePadding.Parent = CodeInput
 
-    ExecActionBtn.Size = UDim2.new(0, 150, 0, 40)
-    ExecActionBtn.Position = UDim2.new(1, -160, 1, -45)
-    ExecActionBtn.BackgroundColor3 = COLORS.BrandRed
-    ExecActionBtn.Text = "Execute"
-    ExecActionBtn.Font = FONTS.Bold
-    ExecActionBtn.TextSize = 13
-    ExecActionBtn.TextColor3 = COLORS.White
-    ExecActionBtn.AutoButtonColor = false
-    ExecActionBtn.Parent = ExecBody
-    createCorner(ExecActionBtn, 4)
-    BindInteractionSounds(ExecActionBtn)
+    local ActionRow = Instance.new("Frame")
+    ActionRow.Size = UDim2.new(1, 0, 0, 40)
+    ActionRow.Position = UDim2.new(0, 0, 1, -40)
+    ActionRow.BackgroundTransparency = 1
+    ActionRow.Parent = ExecBody
 
-    ExecClearBtn.Size = UDim2.new(0, 90, 0, 40)
-    ExecClearBtn.Position = UDim2.new(1, -260, 1, -45)
+    DirectorState.Status = Instance.new("TextLabel")
+    DirectorState.Status.Size = UDim2.new(1, -210, 1, 0)
+    DirectorState.Status.BackgroundTransparency = 1
+    DirectorState.Status.Text = "Auto-saved to AN/NFX_DirectorTabs.json"
+    DirectorState.Status.TextColor3 = COLORS.GreyMuted
+    DirectorState.Status.Font = FONTS.Book
+    DirectorState.Status.TextSize = 10
+    DirectorState.Status.TextXAlignment = Enum.TextXAlignment.Left
+    DirectorState.Status.TextTruncate = Enum.TextTruncate.AtEnd
+    DirectorState.Status.Parent = ActionRow
+
+    ExecClearBtn.Size = UDim2.new(0, 78, 1, 0)
+    ExecClearBtn.Position = UDim2.new(1, -168, 0, 0)
     ExecClearBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     ExecClearBtn.Text = "Clear"
     ExecClearBtn.Font = FONTS.Bold
-    ExecClearBtn.TextSize = 13
+    ExecClearBtn.TextSize = 12
     ExecClearBtn.TextColor3 = COLORS.White
     ExecClearBtn.AutoButtonColor = false
-    ExecClearBtn.Parent = ExecBody
+    ExecClearBtn.Parent = ActionRow
     createCorner(ExecClearBtn, 4)
     createStroke(ExecClearBtn, COLORS.Border, 1)
     BindInteractionSounds(ExecClearBtn)
 
+    ExecActionBtn.Size = UDim2.new(0, 92, 1, 0)
+    ExecActionBtn.Position = UDim2.new(1, -92, 0, 0)
+    ExecActionBtn.BackgroundColor3 = COLORS.BrandRed
+    ExecActionBtn.Text = "Execute"
+    ExecActionBtn.Font = FONTS.Bold
+    ExecActionBtn.TextSize = 12
+    ExecActionBtn.TextColor3 = COLORS.White
+    ExecActionBtn.AutoButtonColor = false
+    ExecActionBtn.Parent = ActionRow
+    createCorner(ExecActionBtn, 4)
+    BindInteractionSounds(ExecActionBtn)
+
+    CodeInput:GetPropertyChangedSignal("Text"):Connect(function()
+        queueDirectorAutosave()
+    end)
+
     ExecActionBtn.MouseButton1Click:Connect(function()
-        pcall(function()
-            local func = loadstring(CodeInput.Text)
-            if func then func() end
+        saveActiveDirectorTab()
+        task.spawn(function()
+            local ok = pcall(function()
+                local func = loadstring(CodeInput.Text)
+                if func then func() end
+            end)
+            ExecActionBtn.Text = ok and "Executed" or "Failed"
+            task.wait(1)
+            if ExecActionBtn then ExecActionBtn.Text = "Execute" end
         end)
     end)
-    ExecClearBtn.MouseButton1Click:Connect(function() CodeInput.Text = "" end)
+
+    ExecClearBtn.MouseButton1Click:Connect(function()
+        CodeInput.Text = ""
+        saveActiveDirectorTab()
+        if DirectorState.Status then DirectorState.Status.Text = "Cleared · Saved" end
+    end)
+
+    refreshDirectorTabButtons()
 end
 
 local CreditsFrame = Instance.new("Frame")
@@ -2145,7 +2737,10 @@ do
 
     local DestroyBtn = makeActionBtn(UiActions, "Destroy UI")
     DestroyBtn.MouseButton1Click:Connect(function() 
+        pcall(function() clearPiratedImageCache() end)
         pcall(function() checkOut() end)
+        if AN_ENV.AN_UNIVERSAL_GUI == ScreenGui then AN_ENV.AN_UNIVERSAL_GUI = nil end
+        if AN_ENV.AN_UNIVERSAL_CLEANUP and AN_ENV.AN_UNIVERSAL_GUI == nil then AN_ENV.AN_UNIVERSAL_CLEANUP = nil end
         ScreenGui:Destroy() 
     end)
 
@@ -2313,16 +2908,42 @@ TagToggleBtn.MouseButton1Click:Connect(function()
     updateOverheadVisibility()
 end)
 
-local function updateDynamicThemeColors(newColor)
+updateDynamicThemeColors = function(newColor)
+    local oldColor = COLORS.BrandRed
     COLORS.BrandRed = newColor
-    BrandLogo.TextColor3 = newColor
-    NavIndicator.BackgroundColor3 = newColor
-    MinimizedStroke.Color = newColor
-    PlayBtn.BackgroundColor3 = newColor
-    ExecActionBtn.BackgroundColor3 = newColor
-    FBSubmitBtn.BackgroundColor3 = newColor
-    CreditsBigN.TextColor3 = newColor
-    SettingsScroll.ScrollBarImageColor3 = newColor
+
+    if ScreenGui and ScreenGui.Parent then
+        for _, object in ipairs(ScreenGui:GetDescendants()) do
+            pcall(function()
+                if object:IsA("GuiObject") then
+                    if object.BackgroundColor3 == oldColor then object.BackgroundColor3 = newColor end
+                    if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+                        if object.TextColor3 == oldColor then object.TextColor3 = newColor end
+                    end
+                    if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+                        if object.ImageColor3 == oldColor then object.ImageColor3 = newColor end
+                    end
+                elseif object:IsA("UIStroke") then
+                    if object.Color == oldColor then object.Color = newColor end
+                elseif object:IsA("ScrollingFrame") then
+                    if object.ScrollBarImageColor3 == oldColor then object.ScrollBarImageColor3 = newColor end
+                end
+            end)
+        end
+    end
+
+    pcall(function() BrandLogo.TextColor3 = newColor end)
+    pcall(function() NavIndicator.BackgroundColor3 = newColor end)
+    pcall(function() MinimizedStroke.Color = newColor end)
+    pcall(function() PlayBtn.BackgroundColor3 = newColor end)
+    pcall(function() ExecActionBtn.BackgroundColor3 = newColor end)
+    pcall(function() FBSubmitBtn.BackgroundColor3 = newColor end)
+    pcall(function() CreditsBigN.TextColor3 = newColor end)
+    pcall(function() SettingsScroll.ScrollBarImageColor3 = newColor end)
+    pcall(function() PiratedSearchBtn.BackgroundColor3 = newColor end)
+    pcall(function() PiratedResults.ScrollBarImageColor3 = newColor end)
+    pcall(function() PiratedExecute.BackgroundColor3 = newColor end)
+    pcall(function() PiratedFavoriteBtn.BackgroundColor3 = newColor end)
     for _, dot in ipairs(DotsHolder:GetChildren()) do
         if dot:IsA("Frame") and dot.Size.X.Offset > 10 then
             dot.BackgroundColor3 = newColor
@@ -2330,9 +2951,12 @@ local function updateDynamicThemeColors(newColor)
     end
 end
 
-local function applyNewTheme(color)
+applyNewTheme = function(color)
+    if typeof(color) ~= "Color3" then return end
     local hex = color:ToHex()
     HexInput.Text = hex
+    CurrentThemeHex = hex
+    CurrentThemeColor = color
     updateDynamicThemeColors(color)
     pcall(function()
         if writefile then writefile(THEME_FILE, hex) end
@@ -2348,7 +2972,20 @@ end)
 
 local currentIndex = 1
 local visibleMovies = {}
+
+-- Movie carousel card sizing
+-- Desktop keeps the original size; mobile uses smaller cards so the poster does not dominate
+-- the carousel on narrow screens.
 local baseCardWidth, baseCardHeight = 135, 202
+local carouselGap = 24
+
+if isMobile() then
+    local viewportWidth = Camera.ViewportSize.X
+    local mobileScale = math.clamp(viewportWidth / 900, 0.68, 0.78)
+    baseCardWidth = math.floor(baseCardWidth * mobileScale)
+    baseCardHeight = math.floor(baseCardHeight * mobileScale)
+    carouselGap = 12
+end
 
 local function layoutCards(instant)
     local containerW = CarouselContainer.AbsoluteSize.X
@@ -2356,7 +2993,7 @@ local function layoutCards(instant)
     for i, card in ipairs(MovieCarousel:GetChildren()) do
         if card:IsA("Frame") then
             local offsetFromCurrent = i - currentIndex
-            local targetX = centerX + offsetFromCurrent * (baseCardWidth + 24) - baseCardWidth / 2
+            local targetX = centerX + offsetFromCurrent * (baseCardWidth + carouselGap) - baseCardWidth / 2
             local isCenter = (i == currentIndex)
             local dist = math.abs(offsetFromCurrent)
             local targetScale = isCenter and 1.05 or 0.82
@@ -2416,6 +3053,7 @@ local function updateDots()
 end
 
 local viewDetailScreen
+local viewPiratedFavoriteDetail
 
 local function createMovieCard(movie, index)
     local card = Instance.new("Frame")
@@ -2447,7 +3085,7 @@ local function createMovieCard(movie, index)
     posterGlow.ZIndex = 2
     posterGlow.Parent = card
 
-    LoadImageAsync(posterImg, movie.Img)
+    LoadImageAsync(posterImg, movie.Img or (movie.SavedPirated and movie.SavedPirated.Image))
 
     local clickSensor = Instance.new("TextButton")
     clickSensor.Size = UDim2.new(1, 0, 1, 0)
@@ -2459,7 +3097,11 @@ local function createMovieCard(movie, index)
 
     clickSensor.MouseButton1Click:Connect(function()
         if index == currentIndex then
-            viewDetailScreen(movie)
+            if movie.Kind == "pirated" and viewPiratedFavoriteDetail then
+                viewPiratedFavoriteDetail(movie)
+            else
+                viewDetailScreen(movie)
+            end
         else
             currentIndex = index
             layoutCards(false)
@@ -2491,8 +3133,9 @@ updateCarousel = function()
     local query = SearchBox.Text:lower()
     visibleMovies = {}
     for _, movie in ipairs(MOVIES) do
-        local matchSearch = query == "" or movie.Title:lower():find(query, 1, true)
-        local matchGenre = (CurrentGenre == "All") or (CurrentGenre == "My List" and isFavorite(movie.Title)) or (movie.Genre == CurrentGenre)
+        local titleText = tostring(movie.Title or "")
+        local matchSearch = query == "" or titleText:lower():find(query, 1, true)
+        local matchGenre = (CurrentGenre == "All") or (CurrentGenre == "My List" and isFavorite(titleText)) or (movie.Genre == CurrentGenre)
         
         local matchTags = true
         for activeTag, _ in pairs(ActiveTagsFilter) do
@@ -2507,6 +3150,28 @@ updateCarousel = function()
         
         if matchSearch and matchGenre and matchTags then
             table.insert(visibleMovies, movie)
+        end
+    end
+
+    -- ScriptBlox favorites are also surfaced in Movies > My List with their
+    -- saved metadata so they remain browsable even after the search result is gone.
+    if CurrentGenre == "My List" then
+        for _, saved in ipairs(getSavedPiratedEntries()) do
+            local titleText = tostring(saved.Title or "Untitled Script")
+            if query == "" or titleText:lower():find(query, 1, true) then
+                table.insert(visibleMovies, {
+                    Kind = "pirated",
+                    Title = titleText,
+                    Img = saved.Image,
+                    Creator = saved.Owner or "ScriptBlox",
+                    Genre = "Pirated",
+                    Date = tostring(saved.UpdatedAt or saved.CreatedAt or ""),
+                    Description = saved.Description or "",
+                    Tags = saved.Tags or {},
+                    Script = saved.Script,
+                    SavedPirated = saved
+                })
+            end
         end
     end
 
@@ -2532,11 +3197,913 @@ local function shiftCarousel(step)
     updateDots()
 end
 
+-- ============================================================================
+-- PIRATED / SCRIPTBLOX SECTION
+-- ============================================================================
+local PiratedFrame
+;(function()
+PiratedFrame = Instance.new("Frame")
+PiratedFrame.Name = "PiratedFrame"
+PiratedFrame.Size = UDim2.new(1, 0, 1, -52)
+PiratedFrame.Position = UDim2.new(0, 0, 0, 52)
+PiratedFrame.BackgroundTransparency = 1
+PiratedFrame.Visible = false
+PiratedFrame.Parent = MainFrame
+
+local PiratedSearch = Instance.new("TextBox")
+PiratedSearch.Name = "PiratedSearch"
+PiratedSearch.Size = UDim2.new(1, -36, 0, 38)
+PiratedSearch.Position = UDim2.new(0, 18, 0, 12)
+PiratedSearch.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+PiratedSearch.BorderSizePixel = 0
+PiratedSearch.Text = ""
+PiratedSearch.PlaceholderText = "Search ScriptBlox scripts..."
+PiratedSearch.PlaceholderColor3 = Color3.fromRGB(105, 105, 105)
+PiratedSearch.TextColor3 = COLORS.White
+PiratedSearch.Font = FONTS.Book
+PiratedSearch.TextSize = 13
+PiratedSearch.ClearTextOnFocus = false
+PiratedSearch.TextXAlignment = Enum.TextXAlignment.Left
+PiratedSearch.ZIndex = 5
+PiratedSearch.Parent = PiratedFrame
+createCorner(PiratedSearch, 5)
+createStroke(PiratedSearch, COLORS.Border, 1, 0.4)
+
+local PiratedSearchBtn = Instance.new("TextButton")
+PiratedSearchBtn.Name = "PiratedSearchBtn"
+PiratedSearchBtn.Size = UDim2.new(0, 78, 0, 30)
+PiratedSearchBtn.Position = UDim2.new(1, -94, 0, 16)
+PiratedSearchBtn.BackgroundColor3 = COLORS.BrandRed
+PiratedSearchBtn.Text = "Search"
+PiratedSearchBtn.TextColor3 = COLORS.White
+PiratedSearchBtn.Font = FONTS.Bold
+PiratedSearchBtn.TextSize = 12
+PiratedSearchBtn.AutoButtonColor = false
+PiratedSearchBtn.ZIndex = 6
+PiratedSearchBtn.Parent = PiratedFrame
+createCorner(PiratedSearchBtn, 4)
+BindInteractionSounds(PiratedSearchBtn)
+
+local PiratedStatusLabel = Instance.new("TextLabel")
+PiratedStatusLabel.Size = UDim2.new(1, -36, 0, 22)
+PiratedStatusLabel.Position = UDim2.new(0, 18, 0, 54)
+PiratedStatusLabel.BackgroundTransparency = 1
+PiratedStatusLabel.Text = "ScriptBlox  •  Verified / Key / Universal / Patched status shown on every result"
+PiratedStatusLabel.TextColor3 = COLORS.GreyMuted
+PiratedStatusLabel.Font = FONTS.Book
+PiratedStatusLabel.TextSize = 10
+PiratedStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+PiratedStatusLabel.ZIndex = 4
+PiratedStatusLabel.Parent = PiratedFrame
+
+PiratedResults = Instance.new("ScrollingFrame")
+PiratedResults.Name = "PiratedResults"
+PiratedResults.Size = UDim2.new(1, -36, 1, -112)
+PiratedResults.Position = UDim2.new(0, 18, 0, 82)
+PiratedResults.BackgroundTransparency = 1
+PiratedResults.BorderSizePixel = 0
+PiratedResults.ScrollBarThickness = 5
+PiratedResults.ScrollBarImageColor3 = COLORS.BrandRed
+PiratedResults.CanvasSize = UDim2.new(0, 0, 0, 0)
+PiratedResults.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PiratedResults.ScrollingDirection = Enum.ScrollingDirection.Y
+PiratedResults.ZIndex = 3
+PiratedResults.Parent = PiratedFrame
+
+PiratedGrid = Instance.new("UIGridLayout")
+PiratedGrid.CellPadding = UDim2.new(0, 10, 0, 10)
+PiratedGrid.CellSize = UDim2.new(0, 205, 0, 184)
+PiratedGrid.SortOrder = Enum.SortOrder.LayoutOrder
+PiratedGrid.Parent = PiratedResults
+
+local PiratedEmpty = Instance.new("TextLabel")
+PiratedEmpty.Name = "PiratedEmpty"
+PiratedEmpty.Size = UDim2.new(1, 0, 0, 60)
+PiratedEmpty.BackgroundTransparency = 1
+PiratedEmpty.Text = "Search ScriptBlox to find scripts."
+PiratedEmpty.TextColor3 = COLORS.GreyMuted
+PiratedEmpty.Font = FONTS.Book
+PiratedEmpty.TextSize = 13
+PiratedEmpty.Visible = true
+PiratedEmpty.ZIndex = 4
+PiratedEmpty.Parent = PiratedResults
+
+-- Full detail container. Everything inside scrolls on small windows/mobile.
+local PiratedDetail = Instance.new("ScrollingFrame")
+PiratedDetail.Name = "PiratedDetail"
+-- Detail view no longer leaves the large search-bar gap above the inner panel.
+-- Keep a small 12px gap below the top navigation/header.
+PiratedDetail.Size = UDim2.new(1, -36, 1, -28)
+PiratedDetail.Position = UDim2.new(0, 18, 0, 12)
+PiratedDetail.BackgroundColor3 = COLORS.DarkCard
+PiratedDetail.BorderSizePixel = 0
+PiratedDetail.Visible = false
+PiratedDetail.ZIndex = 10
+PiratedDetail.ScrollBarThickness = 5
+PiratedDetail.ScrollBarImageColor3 = COLORS.BrandRed
+PiratedDetail.CanvasSize = UDim2.new(0, 0, 0, 0)
+PiratedDetail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PiratedDetail.ScrollingDirection = Enum.ScrollingDirection.Y
+PiratedDetail.Parent = PiratedFrame
+createCorner(PiratedDetail, 7)
+createStroke(PiratedDetail, COLORS.Border, 1, 0.35)
+
+local PiratedDetailPadding = Instance.new("UIPadding")
+PiratedDetailPadding.PaddingTop = UDim.new(0, 12)
+PiratedDetailPadding.PaddingBottom = UDim.new(0, 20)
+PiratedDetailPadding.PaddingLeft = UDim.new(0, 12)
+PiratedDetailPadding.PaddingRight = UDim.new(0, 12)
+PiratedDetailPadding.Parent = PiratedDetail
+
+local PiratedDetailLayout = Instance.new("UIListLayout")
+PiratedDetailLayout.FillDirection = Enum.FillDirection.Vertical
+PiratedDetailLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+PiratedDetailLayout.SortOrder = Enum.SortOrder.LayoutOrder
+PiratedDetailLayout.Padding = UDim.new(0, 10)
+PiratedDetailLayout.Parent = PiratedDetail
+
+local PiratedBack = Instance.new("TextButton")
+PiratedBack.Name = "PiratedBack"
+PiratedBack.Size = UDim2.new(0, 70, 0, 30)
+PiratedBack.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+PiratedBack.Text = "Back"
+PiratedBack.TextColor3 = COLORS.White
+PiratedBack.Font = FONTS.Bold
+PiratedBack.TextSize = 12
+PiratedBack.AutoButtonColor = false
+PiratedBack.LayoutOrder = 1
+PiratedBack.ZIndex = 12
+PiratedBack.Parent = PiratedDetail
+createCorner(PiratedBack, 4)
+BindInteractionSounds(PiratedBack)
+
+local PiratedHero = Instance.new("Frame")
+PiratedHero.Name = "PiratedHero"
+PiratedHero.Size = UDim2.new(1, -24, 0, 252)
+PiratedHero.BackgroundTransparency = 1
+PiratedHero.LayoutOrder = 2
+PiratedHero.ZIndex = 11
+PiratedHero.Parent = PiratedDetail
+
+local PiratedDetailImage = Instance.new("ImageLabel")
+PiratedDetailImage.Name = "PiratedDetailImage"
+PiratedDetailImage.Size = UDim2.new(0, 150, 0, 112)
+PiratedDetailImage.Position = UDim2.new(0, 0, 0, 10)
+PiratedDetailImage.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+PiratedDetailImage.BorderSizePixel = 0
+PiratedDetailImage.ScaleType = Enum.ScaleType.Crop
+PiratedDetailImage.ZIndex = 11
+PiratedDetailImage.Parent = PiratedHero
+createCorner(PiratedDetailImage, 6)
+
+local PiratedNoImage = Instance.new("TextLabel")
+PiratedNoImage.Size = UDim2.new(1, 0, 1, 0)
+PiratedNoImage.BackgroundTransparency = 1
+PiratedNoImage.Text = "NO IMAGE"
+PiratedNoImage.TextColor3 = COLORS.GreyMuted
+PiratedNoImage.Font = FONTS.Bold
+PiratedNoImage.TextSize = 10
+PiratedNoImage.ZIndex = 10
+PiratedNoImage.Parent = PiratedHero
+
+local PiratedHeroInfo = Instance.new("Frame")
+PiratedHeroInfo.Size = UDim2.new(1, -162, 1, 0)
+PiratedHeroInfo.Position = UDim2.new(0, 162, 0, 0)
+PiratedHeroInfo.BackgroundTransparency = 1
+PiratedHeroInfo.ZIndex = 11
+PiratedHeroInfo.Parent = PiratedHero
+
+local PiratedDetailTitle = Instance.new("TextLabel")
+PiratedDetailTitle.Name = "PiratedDetailTitle"
+PiratedDetailTitle.Size = UDim2.new(1, 0, 0, 44)
+PiratedDetailTitle.BackgroundTransparency = 1
+PiratedDetailTitle.TextColor3 = COLORS.White
+PiratedDetailTitle.Font = FONTS.Heavy
+PiratedDetailTitle.TextSize = 21
+PiratedDetailTitle.TextXAlignment = Enum.TextXAlignment.Left
+PiratedDetailTitle.TextYAlignment = Enum.TextYAlignment.Top
+PiratedDetailTitle.TextWrapped = true
+PiratedDetailTitle.TextTruncate = Enum.TextTruncate.AtEnd
+PiratedDetailTitle.ZIndex = 11
+PiratedDetailTitle.Parent = PiratedHeroInfo
+
+local PiratedMeta = Instance.new("TextLabel")
+PiratedMeta.Name = "PiratedMeta"
+PiratedMeta.Size = UDim2.new(1, 0, 0, 68)
+PiratedMeta.Position = UDim2.new(0, 0, 0, 48)
+PiratedMeta.BackgroundTransparency = 1
+PiratedMeta.TextColor3 = COLORS.GreyMuted
+PiratedMeta.Font = FONTS.Medium
+PiratedMeta.TextSize = 11
+PiratedMeta.TextWrapped = true
+PiratedMeta.TextXAlignment = Enum.TextXAlignment.Left
+PiratedMeta.TextYAlignment = Enum.TextYAlignment.Top
+PiratedMeta.ZIndex = 11
+PiratedMeta.Parent = PiratedHeroInfo
+
+-- Main tags and creator-provided tags are separate.
+local PiratedTagsFrame = Instance.new("Frame")
+PiratedTagsFrame.Name = "PiratedTagsFrame"
+PiratedTagsFrame.Size = UDim2.new(1, -24, 0, 58)
+PiratedTagsFrame.LayoutOrder = 3
+PiratedTagsFrame.BackgroundTransparency = 1
+PiratedTagsFrame.ZIndex = 11
+PiratedTagsFrame.Parent = PiratedDetail
+
+local PiratedMainTagsLabel = Instance.new("TextLabel")
+PiratedMainTagsLabel.Size = UDim2.new(1, 0, 0, 18)
+PiratedMainTagsLabel.BackgroundTransparency = 1
+PiratedMainTagsLabel.Text = "STATUS"
+PiratedMainTagsLabel.TextColor3 = COLORS.GreyMuted
+PiratedMainTagsLabel.Font = FONTS.Bold
+PiratedMainTagsLabel.TextSize = 9
+PiratedMainTagsLabel.TextXAlignment = Enum.TextXAlignment.Left
+PiratedMainTagsLabel.Parent = PiratedTagsFrame
+
+local PiratedTagsScroll = Instance.new("ScrollingFrame")
+PiratedTagsScroll.Size = UDim2.new(1, 0, 0, 34)
+PiratedTagsScroll.Position = UDim2.new(0, 0, 0, 18)
+PiratedTagsScroll.BackgroundTransparency = 1
+PiratedTagsScroll.BorderSizePixel = 0
+PiratedTagsScroll.ScrollBarThickness = 0
+PiratedTagsScroll.ScrollingDirection = Enum.ScrollingDirection.X
+PiratedTagsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+PiratedTagsScroll.ZIndex = 12
+PiratedTagsScroll.Parent = PiratedTagsFrame
+
+local PiratedTagsLayout = Instance.new("UIListLayout")
+PiratedTagsLayout.FillDirection = Enum.FillDirection.Horizontal
+PiratedTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+PiratedTagsLayout.Padding = UDim.new(0, 7)
+PiratedTagsLayout.Parent = PiratedTagsScroll
+
+local PiratedCreatorTagsLabel = Instance.new("TextLabel")
+PiratedCreatorTagsLabel.Size = UDim2.new(1, 0, 0, 18)
+PiratedCreatorTagsLabel.BackgroundTransparency = 1
+PiratedCreatorTagsLabel.Text = "CREATOR TAGS"
+PiratedCreatorTagsLabel.TextColor3 = COLORS.GreyMuted
+PiratedCreatorTagsLabel.Font = FONTS.Bold
+PiratedCreatorTagsLabel.TextSize = 9
+PiratedCreatorTagsLabel.TextXAlignment = Enum.TextXAlignment.Left
+PiratedCreatorTagsLabel.Parent = PiratedDetail
+
+local PiratedCreatorTagsScroll = Instance.new("ScrollingFrame")
+PiratedCreatorTagsScroll.Name = "PiratedCreatorTagsScroll"
+PiratedCreatorTagsScroll.Size = UDim2.new(1, -24, 0, 54)
+PiratedCreatorTagsScroll.LayoutOrder = 4
+PiratedCreatorTagsScroll.BackgroundTransparency = 1
+PiratedCreatorTagsScroll.BorderSizePixel = 0
+PiratedCreatorTagsScroll.ScrollBarThickness = 0
+PiratedCreatorTagsScroll.ScrollingDirection = Enum.ScrollingDirection.X
+PiratedCreatorTagsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+PiratedCreatorTagsScroll.ZIndex = 12
+PiratedCreatorTagsScroll.Parent = PiratedDetail
+
+local PiratedCreatorTagsLayout = Instance.new("UIListLayout")
+PiratedCreatorTagsLayout.FillDirection = Enum.FillDirection.Horizontal
+PiratedCreatorTagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+PiratedCreatorTagsLayout.Padding = UDim.new(0, 7)
+PiratedCreatorTagsLayout.Parent = PiratedCreatorTagsScroll
+
+local function addPiratedTag(text, kind, parent)
+    parent = parent or PiratedTagsScroll
+    local tag = Instance.new("TextLabel")
+    tag.AutomaticSize = Enum.AutomaticSize.X
+    tag.Size = UDim2.new(0, 0, 0, 27)
+    -- Netflix-only palette.
+    tag.BackgroundColor3 = kind == "good" and COLORS.BrandRed or Color3.fromRGB(45, 45, 45)
+    tag.TextColor3 = COLORS.White
+    tag.Font = FONTS.Bold
+    tag.TextSize = 10
+    tag.Text = "  " .. tostring(text) .. "  "
+    tag.ZIndex = 12
+    tag.Parent = parent
+    createCorner(tag, 13)
+    return tag
+end
+
+local PiratedDescriptionHeader = Instance.new("TextLabel")
+PiratedDescriptionHeader.Size = UDim2.new(1, -24, 0, 24)
+PiratedDescriptionHeader.LayoutOrder = 5
+PiratedDescriptionHeader.BackgroundTransparency = 1
+PiratedDescriptionHeader.Text = "DESCRIPTION / FEATURES"
+PiratedDescriptionHeader.TextColor3 = COLORS.White
+PiratedDescriptionHeader.Font = FONTS.Bold
+PiratedDescriptionHeader.TextSize = 12
+PiratedDescriptionHeader.TextXAlignment = Enum.TextXAlignment.Left
+PiratedDescriptionHeader.ZIndex = 11
+PiratedDescriptionHeader.Parent = PiratedDetail
+
+local PiratedDescription = Instance.new("TextLabel")
+PiratedDescription.Name = "PiratedDescription"
+PiratedDescription.Size = UDim2.new(1, -24, 0, 120)
+PiratedDescription.AutomaticSize = Enum.AutomaticSize.Y
+PiratedDescription.LayoutOrder = 6
+PiratedDescription.BackgroundColor3 = Color3.fromRGB(21, 21, 21)
+PiratedDescription.TextColor3 = COLORS.GreyLight
+PiratedDescription.Font = FONTS.Book
+PiratedDescription.TextSize = 12
+PiratedDescription.TextWrapped = true
+PiratedDescription.TextXAlignment = Enum.TextXAlignment.Left
+PiratedDescription.TextYAlignment = Enum.TextYAlignment.Top
+PiratedDescription.ZIndex = 11
+PiratedDescription.Parent = PiratedDetail
+createCorner(PiratedDescription, 5)
+local descPad = Instance.new("UIPadding")
+descPad.PaddingTop = UDim.new(0, 10)
+descPad.PaddingBottom = UDim.new(0, 10)
+descPad.PaddingLeft = UDim.new(0, 10)
+descPad.PaddingRight = UDim.new(0, 10)
+descPad.Parent = PiratedDescription
+
+local PiratedCommentsHeader = Instance.new("TextLabel")
+PiratedCommentsHeader.Size = UDim2.new(1, -24, 0, 28)
+PiratedCommentsHeader.LayoutOrder = 7
+PiratedCommentsHeader.BackgroundTransparency = 1
+PiratedCommentsHeader.Text = "COMMUNITY COMMENTS"
+PiratedCommentsHeader.TextColor3 = COLORS.White
+PiratedCommentsHeader.Font = FONTS.Bold
+PiratedCommentsHeader.TextSize = 12
+PiratedCommentsHeader.TextXAlignment = Enum.TextXAlignment.Left
+PiratedCommentsHeader.ZIndex = 11
+PiratedCommentsHeader.Parent = PiratedDetail
+
+local PiratedComments = Instance.new("Frame")
+PiratedComments.Name = "PiratedComments"
+PiratedComments.Size = UDim2.new(1, -24, 0, 10)
+PiratedComments.AutomaticSize = Enum.AutomaticSize.Y
+PiratedComments.LayoutOrder = 8
+PiratedComments.BackgroundTransparency = 1
+PiratedComments.ZIndex = 11
+PiratedComments.Parent = PiratedDetail
+
+local PiratedCommentsLayout = Instance.new("UIListLayout")
+PiratedCommentsLayout.Padding = UDim.new(0, 7)
+PiratedCommentsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+PiratedCommentsLayout.Parent = PiratedComments
+
+local PiratedExecuteRow = Instance.new("Frame")
+PiratedExecuteRow.Name = "PiratedExecuteRow"
+PiratedExecuteRow.Size = UDim2.new(1, 0, 0, 116)
+PiratedExecuteRow.Position = UDim2.new(0, 0, 0, 120)
+PiratedExecuteRow.BackgroundTransparency = 1
+PiratedExecuteRow.ZIndex = 12
+PiratedExecuteRow.Parent = PiratedHeroInfo
+
+local PiratedExecuteLayout = Instance.new("UIListLayout")
+PiratedExecuteLayout.FillDirection = Enum.FillDirection.Vertical
+PiratedExecuteLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+PiratedExecuteLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+PiratedExecuteLayout.Padding = UDim.new(0, 6)
+PiratedExecuteLayout.Parent = PiratedExecuteRow
+
+local PiratedExecute = Instance.new("TextButton")
+PiratedExecute.Name = "PiratedExecute"
+PiratedExecute.Size = UDim2.new(1, 0, 0, 34)
+PiratedExecute.BackgroundColor3 = COLORS.BrandRed
+PiratedExecute.Text = "Execute"
+PiratedExecute.TextColor3 = COLORS.White
+PiratedExecute.Font = FONTS.Bold
+PiratedExecute.TextSize = 12
+PiratedExecute.AutoButtonColor = false
+PiratedExecute.ZIndex = 12
+PiratedExecute.Parent = PiratedExecuteRow
+createCorner(PiratedExecute, 4)
+BindInteractionSounds(PiratedExecute)
+
+PiratedOpenTab = Instance.new("TextButton")
+PiratedOpenTab.Name = "PiratedOpenTab"
+PiratedOpenTab.Size = UDim2.new(1, 0, 0, 34)
+PiratedOpenTab.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+PiratedOpenTab.Text = "Open Tab"
+PiratedOpenTab.TextColor3 = COLORS.White
+PiratedOpenTab.Font = FONTS.Bold
+PiratedOpenTab.TextSize = 12
+PiratedOpenTab.AutoButtonColor = false
+PiratedOpenTab.ZIndex = 12
+PiratedOpenTab.Parent = PiratedExecuteRow
+createCorner(PiratedOpenTab, 4)
+createStroke(PiratedOpenTab, COLORS.Border, 1)
+BindInteractionSounds(PiratedOpenTab)
+
+PiratedFavoriteBtn = Instance.new("TextButton")
+PiratedFavoriteBtn.Name = "PiratedFavoriteBtn"
+PiratedFavoriteBtn.Size = UDim2.new(1, 0, 0, 34)
+PiratedFavoriteBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+PiratedFavoriteBtn.Text = "+ My List"
+PiratedFavoriteBtn.TextColor3 = COLORS.White
+PiratedFavoriteBtn.Font = FONTS.Bold
+PiratedFavoriteBtn.TextSize = 11
+PiratedFavoriteBtn.AutoButtonColor = false
+PiratedFavoriteBtn.ZIndex = 12
+PiratedFavoriteBtn.Parent = PiratedExecuteRow
+createCorner(PiratedFavoriteBtn, 4)
+createStroke(PiratedFavoriteBtn, COLORS.Border, 1)
+BindInteractionSounds(PiratedFavoriteBtn)
+
+do
+piratedScripts = {}
+selectedPirated = nil
+selectedPiratedComments = {}
+piratedSearchBusy = false
+piratedPage = 1
+piratedTotalPages = 1
+piratedLoadingMore = false
+
+local function piratedHttpGet(url)
+    local success, body = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not success or not body then return nil end
+    local ok, decoded = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+    if not ok then return nil end
+    return decoded
+end
+
+local function clearPiratedResults()
+    for _, child in ipairs(PiratedResults:GetChildren()) do
+        if child:IsA("GuiObject") and child ~= PiratedEmpty then
+            child:Destroy()
+        end
+    end
+end
+
+local function clearPiratedComments()
+    for _, child in ipairs(PiratedComments:GetChildren()) do
+        if child:IsA("GuiObject") then child:Destroy() end
+    end
+end
+
+local function clearPiratedTags()
+    for _, child in ipairs(PiratedTagsScroll:GetChildren()) do
+        if child:IsA("TextLabel") then child:Destroy() end
+    end
+end
+
+local function piratedGameName(scriptData)
+    return (scriptData.game and scriptData.game.name) or "Unknown Game"
+end
+
+local function formatPiratedDate(value)
+    if type(value) ~= "string" or value == "" then return "Unknown date" end
+    local y, m, d = value:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+    if y then return y .. "-" .. m .. "-" .. d end
+    return value
+end
+
+function createPiratedResult(scriptData, index)
+    local card = Instance.new("TextButton")
+    card.Name = "PiratedCard_" .. index
+    card.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    card.BorderSizePixel = 0
+    card.Text = ""
+    card.AutoButtonColor = false
+    card.LayoutOrder = index
+    card.ZIndex = 5
+    card.Parent = PiratedResults
+    createCorner(card, 7)
+    createStroke(card, COLORS.Border, 1, 0.5)
+    BindInteractionSounds(card)
+
+    local img = Instance.new("ImageLabel")
+    img.Size = UDim2.new(0, 78, 1, -12)
+    img.Position = UDim2.new(0, 6, 0, 6)
+    img.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+    img.BorderSizePixel = 0
+    img.ScaleType = Enum.ScaleType.Crop
+    img.ZIndex = 6
+    img.Parent = card
+    createCorner(img, 5)
+    LoadImageAsync(img, scriptData.image or (scriptData.game and scriptData.game.imageUrl), true, true)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -94, 0, 32)
+    title.Position = UDim2.new(0, 90, 0, 9)
+    title.BackgroundTransparency = 1
+    title.Text = tostring(scriptData.title or "Untitled Script")
+    title.TextColor3 = COLORS.White
+    title.Font = FONTS.Bold
+    title.TextSize = 12
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextYAlignment = Enum.TextYAlignment.Top
+    title.TextWrapped = true
+    title.ZIndex = 6
+    title.Parent = card
+
+    local meta = Instance.new("TextLabel")
+    meta.Size = UDim2.new(1, -94, 0, 38)
+    meta.Position = UDim2.new(0, 90, 0, 44)
+    meta.BackgroundTransparency = 1
+    meta.Text = piratedGameName(scriptData) .. "\n" ..
+        tostring(scriptData.views or 0) .. " views • " .. tostring(scriptData.likeCount or 0) .. " likes"
+    meta.TextColor3 = COLORS.GreyMuted
+    meta.Font = FONTS.Book
+    meta.TextSize = 10
+    meta.TextWrapped = true
+    meta.TextXAlignment = Enum.TextXAlignment.Left
+    meta.TextYAlignment = Enum.TextYAlignment.Top
+    meta.ZIndex = 6
+    meta.Parent = card
+
+    local tags = Instance.new("Frame")
+    tags.Size = UDim2.new(1, -94, 0, 48)
+    tags.Position = UDim2.new(0, 90, 1, -54)
+    tags.BackgroundTransparency = 1
+    tags.ZIndex = 7
+    tags.Parent = card
+
+    local tagGrid = Instance.new("UIGridLayout")
+    tagGrid.CellSize = UDim2.new(0.5, -3, 0, 20)
+    tagGrid.CellPadding = UDim2.new(0, 6, 0, 4)
+    tagGrid.FillDirection = Enum.FillDirection.Horizontal
+    tagGrid.FillDirectionMaxCells = 2
+    tagGrid.SortOrder = Enum.SortOrder.LayoutOrder
+    tagGrid.Parent = tags
+
+    local function cardTag(text, kind, order)
+        local tag = Instance.new("TextLabel")
+        tag.Size = UDim2.new(0, 0, 0, 20)
+        tag.BackgroundColor3 = kind == "good" and COLORS.BrandRed or Color3.fromRGB(48, 48, 48)
+        tag.TextColor3 = COLORS.White
+        tag.Font = FONTS.Bold
+        tag.TextSize = 8
+        tag.Text = tostring(text)
+        tag.TextXAlignment = Enum.TextXAlignment.Center
+        tag.TextTruncate = Enum.TextTruncate.AtEnd
+        tag.LayoutOrder = order
+        tag.ZIndex = 8
+        tag.Parent = tags
+        createCorner(tag, 10)
+    end
+
+    cardTag(scriptData.verified and "VERIFIED" or "UNVERIFIED", scriptData.verified and "good" or "neutral", 1)
+    cardTag(scriptData.key and "KEY SYSTEM" or "KEYLESS", "neutral", 2)
+    cardTag(scriptData.isUniversal and "UNIVERSAL" or "GAME", scriptData.isUniversal and "good" or "neutral", 3)
+    cardTag(scriptData.isPatched and "PATCHED" or "WORKING", scriptData.isPatched and "neutral" or "good", 4)
+
+    card.MouseEnter:Connect(function()
+        TweenService:Create(card, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+    end)
+    card.MouseLeave:Connect(function()
+        TweenService:Create(card, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+    end)
+
+    card.MouseButton1Click:Connect(function()
+        local slug = scriptData.slug or scriptData._id
+        local detail = slug and piratedHttpGet("https://scriptblox.com/api/script/" .. tostring(slug))
+        local full = detail and detail.script or scriptData
+        if not full then return end
+        renderPiratedDetail(full)
+    end)
+end
+
+function renderPiratedDetail(full, preloadedComments)
+    if not full then return end
+    selectedPirated = full
+    selectedPiratedComments = type(preloadedComments) == "table" and preloadedComments or {}
+
+    PiratedSearch.Visible = false
+    PiratedSearchBtn.Visible = false
+    PiratedStatusLabel.Visible = false
+    PiratedResults.Visible = false
+    PiratedDetail.Visible = true
+    PiratedDetail.CanvasPosition = Vector2.new(0, 0)
+
+    PiratedDetailTitle.Text = tostring(full.title or "Untitled Script")
+    local detailImageUrl = full.image or (full.game and full.game.imageUrl)
+    PiratedDetailImage.Image = ""
+    PiratedNoImage.Visible = not (detailImageUrl and detailImageUrl ~= "")
+    LoadImageAsync(PiratedDetailImage, detailImageUrl, true, true)
+
+    local likes = tonumber(full.likeCount or full.Likes) or 0
+    local dislikes = tonumber(full.dislikeCount or full.Dislikes) or 0
+    local totalVotes = likes + dislikes
+    local rating = totalVotes > 0 and math.floor((likes / totalVotes) * 100 + 0.5) or 0
+    local owner = (full.owner and full.owner.username) or full.Owner or "Unknown"
+    PiratedMeta.Text = piratedGameName(full) .. "\n" ..
+        "★ " .. tostring(rating) .. "% positive • " .. tostring(likes) .. " likes • " .. tostring(dislikes) .. " dislikes\n" ..
+        tostring(full.views or full.Views or 0) .. " views • by " .. owner .. "\nUpdated: " .. formatPiratedDate(full.updatedAt or full.UpdatedAt or full.createdAt or full.CreatedAt)
+
+    clearPiratedTags()
+    for _, child in ipairs(PiratedCreatorTagsScroll:GetChildren()) do
+        if child:IsA("TextLabel") then child:Destroy() end
+    end
+    local isVerified = full.verified == true or full.Verified == true
+    local isKey = full.key == true or full.Key == true
+    local isUniversal = full.isUniversal == true or full.Universal == true
+    local isPatched = full.isPatched == true or full.Patched == true
+    addPiratedTag(isVerified and "VERIFIED" or "UNVERIFIED", isVerified and "good" or "neutral")
+    addPiratedTag(isKey and "KEY SYSTEM" or "KEYLESS", "neutral")
+    addPiratedTag(isUniversal and "UNIVERSAL" or "GAME SPECIFIC", isUniversal and "good" or "neutral")
+    addPiratedTag(isPatched and "PATCHED" or "WORKING", "neutral")
+    addPiratedTag(tostring(full.scriptType or full.ScriptType or "FREE"):upper(), "neutral")
+    if full.visibility or full.Visibility then addPiratedTag(tostring(full.visibility or full.Visibility):upper(), "neutral") end
+
+    local tags = full.tags or full.Tags
+    if type(tags) == "table" then
+        for _, tagName in ipairs(tags) do
+            local text = tostring(tagName)
+            if text ~= "" then addPiratedTag(text, "neutral", PiratedCreatorTagsScroll) end
+        end
+    end
+    task.defer(function()
+        PiratedTagsScroll.CanvasSize = UDim2.new(0, PiratedTagsLayout.AbsoluteContentSize.X + 8, 0, 0)
+        PiratedCreatorTagsScroll.CanvasSize = UDim2.new(0, PiratedCreatorTagsLayout.AbsoluteContentSize.X + 8, 0, 0)
+    end)
+
+    PiratedDescription.Text = tostring(full.features or full.description or full.Description or "No description provided.")
+
+    clearPiratedComments()
+    local comments = selectedPiratedComments
+    if #comments == 0 and full._id then
+        local commentResponse = piratedHttpGet("https://scriptblox.com/api/comment/" .. tostring(full._id) .. "?page=1&max=50")
+        comments = commentResponse and commentResponse.result and commentResponse.result.comments or {}
+        selectedPiratedComments = type(comments) == "table" and comments or {}
+    end
+
+    if type(comments) ~= "table" or #comments == 0 then
+        local none = Instance.new("TextLabel")
+        none.Size = UDim2.new(1, 0, 0, 34)
+        none.BackgroundColor3 = Color3.fromRGB(21, 21, 21)
+        none.Text = "No comments available."
+        none.TextColor3 = COLORS.GreyMuted
+        none.Font = FONTS.Book
+        none.TextSize = 11
+        none.TextXAlignment = Enum.TextXAlignment.Left
+        none.ZIndex = 11
+        none.Parent = PiratedComments
+        createCorner(none, 5)
+    else
+        for i, comment in ipairs(comments) do
+            local box = Instance.new("Frame")
+            box.Size = UDim2.new(1, 0, 0, 78)
+            box.BackgroundColor3 = Color3.fromRGB(30, 31, 34)
+            box.BorderSizePixel = 0
+            box.LayoutOrder = i
+            box.ZIndex = 11
+            box.Parent = PiratedComments
+            createCorner(box, 6)
+
+            local accent = Instance.new("Frame")
+            accent.Size = UDim2.new(0, 3, 1, 0)
+            accent.BackgroundColor3 = COLORS.BrandRed
+            accent.BorderSizePixel = 0
+            accent.ZIndex = 12
+            accent.Parent = box
+            createCorner(accent, 2)
+
+            local avatar = Instance.new("ImageLabel")
+            avatar.Size = UDim2.new(0, 28, 0, 28)
+            avatar.Position = UDim2.new(0, 10, 0, 9)
+            avatar.BackgroundColor3 = Color3.fromRGB(47, 49, 54)
+            avatar.BorderSizePixel = 0
+            avatar.ScaleType = Enum.ScaleType.Crop
+            avatar.ZIndex = 12
+            avatar.Parent = box
+            createCorner(avatar, 14)
+            if comment.commentBy and comment.commentBy.profilePicture then
+                LoadImageAsync(avatar, comment.commentBy.profilePicture, true, true)
+            end
+
+            local username = tostring((comment.commentBy and comment.commentBy.username) or comment.Username or "Unknown")
+            local user = Instance.new("TextLabel")
+            user.Size = UDim2.new(1, -54, 0, 19)
+            user.Position = UDim2.new(0, 47, 0, 7)
+            user.BackgroundTransparency = 1
+            user.Text = "@" .. username .. ((comment.commentBy and comment.commentBy.verified) and "  ✓" or "")
+            user.TextColor3 = COLORS.White
+            user.Font = FONTS.Bold
+            user.TextSize = 10
+            user.TextXAlignment = Enum.TextXAlignment.Left
+            user.ZIndex = 12
+            user.Parent = box
+
+            local stamp = Instance.new("TextLabel")
+            stamp.Size = UDim2.new(1, -54, 0, 16)
+            stamp.Position = UDim2.new(0, 47, 0, 26)
+            stamp.BackgroundTransparency = 1
+            stamp.Text = formatPiratedDate(comment.createdAt or comment.updatedAt or comment.CreatedAt or comment.UpdatedAt)
+            stamp.TextColor3 = Color3.fromRGB(148, 150, 156)
+            stamp.Font = FONTS.Book
+            stamp.TextSize = 9
+            stamp.TextXAlignment = Enum.TextXAlignment.Left
+            stamp.ZIndex = 12
+            stamp.Parent = box
+
+            local body = Instance.new("TextLabel")
+            body.Size = UDim2.new(1, -20, 0, 28)
+            body.Position = UDim2.new(0, 10, 0, 45)
+            body.BackgroundTransparency = 1
+            body.Text = tostring(comment.text or comment.Text or "")
+            body.TextColor3 = COLORS.GreyLight
+            body.Font = FONTS.Book
+            body.TextSize = 10
+            body.TextWrapped = true
+            body.TextXAlignment = Enum.TextXAlignment.Left
+            body.TextYAlignment = Enum.TextYAlignment.Top
+            body.ZIndex = 12
+            body.Parent = box
+        end
+    end
+
+    PiratedFavoriteBtn.Text = isPiratedFavorite(tostring(full.title or "Untitled Script")) and "✔ My List" or "+ My List"
+end
+
+viewPiratedFavoriteDetail = function(saved)
+    local full = {
+        title = saved.Title,
+        script = saved.Script,
+        image = saved.Image,
+        game = saved.Game,
+        features = saved.Description,
+        likeCount = saved.Likes,
+        dislikeCount = saved.Dislikes,
+        views = saved.Views,
+        owner = {username = saved.Owner or "Unknown"},
+        updatedAt = saved.UpdatedAt,
+        createdAt = saved.CreatedAt,
+        tags = saved.Tags,
+        verified = saved.Verified,
+        key = saved.Key,
+        isUniversal = saved.Universal,
+        isPatched = saved.Patched,
+        scriptType = saved.ScriptType,
+        visibility = saved.Visibility,
+        _id = saved.Id,
+        slug = saved.Slug
+    }
+    renderPiratedDetail(full, saved.Comments or {})
+    routeToView("pirated")
+    updateTabLine(PiratedTab)
+end
+
+function searchPirated(query)
+    query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if query == "" or piratedSearchBusy then return end
+    piratedSearchBusy = true
+    PiratedSearchBtn.Text = "Searching..."
+    clearPiratedImageCache()
+    clearPiratedResults()
+    PiratedEmpty.Visible = true
+    PiratedEmpty.Text = "Searching ScriptBlox..."
+
+    task.spawn(function()
+        local encoded = HttpService:UrlEncode(query)
+        local url = "https://scriptblox.com/api/script/search?q=" .. encoded .. "&page=1&max=20&sortBy=views&order=desc"
+        local response = piratedHttpGet(url)
+        piratedScripts = response and response.result and response.result.scripts or {}
+        piratedPage = 1
+        piratedTotalPages = tonumber(response and response.result and response.result.totalPages) or 1
+        piratedLoadingMore = false
+        clearPiratedResults()
+        if #piratedScripts == 0 then
+            PiratedEmpty.Visible = true
+            PiratedEmpty.Text = "No ScriptBlox results found."
+        else
+            PiratedEmpty.Visible = false
+            for i, scriptData in ipairs(piratedScripts) do
+                createPiratedResult(scriptData, i)
+            end
+        end
+        PiratedSearchBtn.Text = "Search"
+        piratedSearchBusy = false
+    end)
+end
+
+PiratedSearchBtn.MouseButton1Click:Connect(function()
+    searchPirated(PiratedSearch.Text)
+end)
+
+PiratedSearch.FocusLost:Connect(function(enterPressed)
+    if enterPressed then searchPirated(PiratedSearch.Text) end
+end)
+
+PiratedBack.MouseButton1Click:Connect(function()
+    selectedPirated = nil
+    clearPiratedImageCache()
+    PiratedDetail.Visible = false
+    PiratedSearch.Visible = true
+    PiratedSearchBtn.Visible = true
+    PiratedStatusLabel.Visible = true
+    PiratedResults.Visible = true
+end)
+
+PiratedExecute.MouseButton1Click:Connect(function()
+    if not selectedPirated then return end
+    local source = selectedPirated.script
+    if type(source) ~= "string" or source == "" then
+        PiratedExecute.Text = "No Source"
+        task.delay(1.5, function()
+            if PiratedExecute then PiratedExecute.Text = "Execute" end
+        end)
+        return
+    end
+    task.spawn(function()
+        local ok = pcall(function()
+            local fn = loadstring(source)
+            if fn then fn() end
+        end)
+        PiratedExecute.Text = ok and "Executed" or "Failed"
+        task.wait(1.2)
+        if PiratedExecute then PiratedExecute.Text = "Execute" end
+    end)
+    -- Executing also persists the current ScriptBlox metadata when it is favorited.
+    if isPiratedFavorite(tostring(selectedPirated.title or "Untitled Script")) then
+        local idx = findFavoriteIndex(tostring(selectedPirated.title or "Untitled Script"), "pirated")
+        if idx and Favorites[idx] then
+            Favorites[idx].Script = source
+            Favorites[idx].Description = selectedPirated.features or selectedPirated.description or Favorites[idx].Description
+            Favorites[idx].Comments = selectedPiratedComments or Favorites[idx].Comments
+            saveFavorites()
+        end
+    end
+end)
+
+PiratedOpenTab.MouseButton1Click:Connect(function()
+    if not selectedPirated then return end
+    local source = selectedPirated.script
+    if type(source) ~= "string" or source == "" then
+        PiratedOpenTab.Text = "No Source"
+        task.delay(1.5, function() if PiratedOpenTab then PiratedOpenTab.Text = "Open Tab" end end)
+        return
+    end
+    openScriptInDirectorTab(selectedPirated.title or "ScriptBlox Script", source)
+end)
+
+PiratedFavoriteBtn.MouseButton1Click:Connect(function()
+    if not selectedPirated then return end
+    togglePiratedFavorite(selectedPirated, selectedPiratedComments)
+    PiratedFavoriteBtn.Text = isPiratedFavorite(tostring(selectedPirated.title or "Untitled Script")) and "✔ My List" or "+ My List"
+    if CurrentGenre == "My List" then updateCarousel() end
+end)
+
+PiratedGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PiratedResults.CanvasSize = UDim2.new(0, 0, 0, PiratedGrid.AbsoluteContentSize.Y + 18)
+end)
+
+PiratedResults.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseWheel then
+        local maxY = math.max(PiratedResults.AbsoluteCanvasSize.Y - PiratedResults.AbsoluteSize.Y, 0)
+        if PiratedResults.CanvasPosition.Y >= maxY - 120 and not piratedLoadingMore and piratedPage < piratedTotalPages and not piratedSearchBusy then
+            piratedLoadingMore = true
+            local nextPage = piratedPage + 1
+            task.spawn(function()
+                local encoded = HttpService:UrlEncode(PiratedSearch.Text)
+                local response = piratedHttpGet("https://scriptblox.com/api/script/search?q=" .. encoded .. "&page=" .. tostring(nextPage) .. "&max=20&sortBy=views&order=desc")
+                local more = response and response.result and response.result.scripts or {}
+                if #more > 0 then
+                    piratedPage = nextPage
+                    piratedTotalPages = tonumber(response.result.totalPages) or piratedTotalPages
+                    local startIndex = #piratedScripts + 1
+                    for i, scriptData in ipairs(more) do
+                        table.insert(piratedScripts, scriptData)
+                        createPiratedResult(scriptData, startIndex + i - 1)
+                    end
+                end
+                piratedLoadingMore = false
+            end)
+        end
+    end
+end)
+
+PiratedTagsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PiratedTagsScroll.CanvasSize = UDim2.new(0, PiratedTagsLayout.AbsoluteContentSize.X + 8, 0, 0)
+end)
+
+PiratedCommentsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PiratedComments.Size = UDim2.new(1, -24, 0, PiratedCommentsLayout.AbsoluteContentSize.Y)
+end)
+
+PiratedDetailLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PiratedDetail.CanvasSize = UDim2.new(0, 0, 0, PiratedDetailLayout.AbsoluteContentSize.Y + 32)
+end)
+
+task.defer(function()
+    if isMobile() then
+        PiratedGrid.CellSize = UDim2.new(1, -6, 0, 168)
+        PiratedGrid.CellPadding = UDim2.new(0, 6, 0, 8)
+        PiratedDetailImage.Size = UDim2.new(0, 112, 0, 96)
+        PiratedHero.Size = UDim2.new(1, -24, 0, 270)
+        PiratedHeroInfo.Position = UDim2.new(0, 122, 0, 0)
+        PiratedHeroInfo.Size = UDim2.new(1, -122, 1, 0)
+        PiratedDetailTitle.TextSize = 17
+        PiratedMeta.TextSize = 9
+        PiratedExecuteRow.Position = UDim2.new(0, 0, 0, 120)
+        PiratedExecuteRow.Size = UDim2.new(1, 0, 0, 116)
+    end
+end)
+
+end
+end)()
+
 local activeView = nil
 local views = {
     menu = MenuFrame,
     detail = DetailFrame,
     executor = ExecutorFrame,
+    pirated = PiratedFrame,
     credits = CreditsFrame,
     settings = SettingsFrame
 }
@@ -2545,7 +4112,7 @@ if AdminFrame then views.admin = AdminFrame end
 local viewOrigins = {}
 for name, frame in pairs(views) do viewOrigins[name] = frame.Position end
 
-local function routeToView(viewName)
+routeToView = function(viewName)
     if viewName == activeView then return end
     local outgoing = views[activeView]
     local incoming = views[viewName]
@@ -2634,13 +4201,14 @@ PlayBtn.MouseEnter:Connect(function() TweenService:Create(PlayBtn, TweenInfo.new
 PlayBtn.MouseLeave:Connect(function() TweenService:Create(PlayBtn, TweenInfo.new(0.15), {BackgroundColor3 = COLORS.BrandRed}):Play() end)
 LeftArrow.MouseButton1Click:Connect(function() shiftCarousel(-1) end)
 RightArrow.MouseButton1Click:Connect(function() shiftCarousel(1) end)
-BackBtn.MouseButton1Click:Connect(function() routeToView("menu"); updateTabLine(MoviesTab) end)
-MoviesTab.MouseButton1Click:Connect(function() updateTabLine(MoviesTab); routeToView("menu") end)
-ExecutorTab.MouseButton1Click:Connect(function() updateTabLine(ExecutorTab); routeToView("executor") end)
-SettingsTab.MouseButton1Click:Connect(function() updateTabLine(SettingsTab); routeToView("settings") end)
-CreditsTab.MouseButton1Click:Connect(function() updateTabLine(CreditsTab); routeToView("credits") end)
+BackBtn.MouseButton1Click:Connect(function() clearPiratedImageCache(); routeToView("menu"); updateTabLine(MoviesTab) end)
+MoviesTab.MouseButton1Click:Connect(function() updateTabLine(MoviesTab); clearPiratedImageCache(); routeToView("menu") end)
+ExecutorTab.MouseButton1Click:Connect(function() updateTabLine(ExecutorTab); clearPiratedImageCache(); routeToView("executor") end)
+PiratedTab.MouseButton1Click:Connect(function() updateTabLine(PiratedTab); routeToView("pirated") end)
+SettingsTab.MouseButton1Click:Connect(function() updateTabLine(SettingsTab); clearPiratedImageCache(); routeToView("settings") end)
+CreditsTab.MouseButton1Click:Connect(function() updateTabLine(CreditsTab); clearPiratedImageCache(); routeToView("credits") end)
 if AdminTab then
-    AdminTab.MouseButton1Click:Connect(function() updateTabLine(AdminTab); routeToView("admin") end)
+    AdminTab.MouseButton1Click:Connect(function() updateTabLine(AdminTab); clearPiratedImageCache(); routeToView("admin") end)
 end
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
@@ -2678,6 +4246,11 @@ end)
 
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local targetSize = getTargetSize()
+    if PiratedGrid then
+        local width = PiratedResults.AbsoluteSize.X
+        PiratedGrid.CellSize = isMobile() and UDim2.new(1, -6, 0, 168) or UDim2.new(0, 205, 0, 184)
+        PiratedGrid.CellPadding = isMobile() and UDim2.new(0, 6, 0, 8) or UDim2.new(0, 10, 0, 10)
+    end
     local viewport = Camera.ViewportSize
     MainFrame.Size = UDim2.new(
         0, math.min(targetSize.X.Offset, viewport.X - 24),
@@ -2966,9 +4539,12 @@ if isUserBlacklisted then
         })
         windowFade:Play()
         windowFade.Completed:Wait()
+        if AN_ENV.AN_UNIVERSAL_GUI == ScreenGui then AN_ENV.AN_UNIVERSAL_GUI = nil end
+        if AN_ENV.AN_UNIVERSAL_CLEANUP then AN_ENV.AN_UNIVERSAL_CLEANUP = nil end
         ScreenGui:Destroy()
     end)
 else
+    AN_ENV.AN_UNIVERSAL_GUI = ScreenGui
     checkIn()
     routeToView("menu")
     updateTabLine(MoviesTab)
