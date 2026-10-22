@@ -1,7 +1,6 @@
 local IMAGE_URLS = {
     IntroLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled230_20260713073832.png",
     PillLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/1000043901.png",
-    NeoBackground = "https://raw.githubusercontent.com/GUICLOUDS/Neo-s/refs/heads/main/Background.gif",
     NeoIcon = "https://raw.githubusercontent.com/GUICLOUDS/Neo-s/refs/heads/main/Icon.gif",
     DefaultIntroLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/Untitled230_20260713073832.png",
     DefaultPillLogo = "https://raw.githubusercontent.com/Fe-ProjectR/GAME-IMAGES/refs/heads/main/1000043901.png"
@@ -872,42 +871,12 @@ AN_ENV.AN_NEO_THEME_STATE = {
     OriginalText = setmetatable({}, {__mode = "k"}),
     LastText = setmetatable({}, {__mode = "k"}),
     TextHooks = setmetatable({}, {__mode = "k"}),
-    OriginalTransparency = setmetatable({}, {__mode = "k"}),
     GifCache = {},
     GifTargets = {
-        background = setmetatable({}, {__mode = "k"}),
         icon = setmetatable({}, {__mode = "k"})
     },
     PlaybackTokens = setmetatable({}, {__mode = "k"})
 }
-
-do
-    local neoBackground = Instance.new("ImageLabel")
-    neoBackground.Name = "NeoThemeBackground"
-    neoBackground.Size = UDim2.new(1, 0, 1, 0)
-    neoBackground.Position = UDim2.new(0, 0, 0, 0)
-    neoBackground.BackgroundTransparency = 1
-    neoBackground.ImageTransparency = 0
-    neoBackground.ScaleType = Enum.ScaleType.Crop
-    neoBackground.Visible = false
-    neoBackground.Active = false
-    neoBackground.ZIndex = 1
-    neoBackground.Parent = MainFrame
-    AN_ENV.AN_NEO_THEME_STATE.BackgroundImage = neoBackground
-
-    local neoDimmer = Instance.new("Frame")
-    neoDimmer.Name = "NeoThemeDimmer"
-    neoDimmer.Size = UDim2.new(1, 0, 1, 0)
-    neoDimmer.Position = UDim2.new(0, 0, 0, 0)
-    neoDimmer.BackgroundColor3 = Color3.new(0, 0, 0)
-    neoDimmer.BackgroundTransparency = 0.68
-    neoDimmer.BorderSizePixel = 0
-    neoDimmer.Visible = false
-    neoDimmer.Active = false
-    neoDimmer.ZIndex = 1
-    neoDimmer.Parent = MainFrame
-    AN_ENV.AN_NEO_THEME_STATE.Dimmer = neoDimmer
-end
 
 -- GIF playback support: Roblox ImageLabels do not animate raw GIF files by themselves.
 -- This small decoder converts downloaded GIF frames into local PNGs and cycles them.
@@ -1300,7 +1269,7 @@ function AN_NeoAttachGif(target, key)
     if not (state and target and target.Parent) then return end
     state.GifTargets[key][target] = true
     target.ImageTransparency = 0
-    local urls = {background = IMAGE_URLS.NeoBackground, icon = IMAGE_URLS.NeoIcon}
+    local urls = {icon = IMAGE_URLS.NeoIcon}
     local cache = state.GifCache[key]
     if cache and cache.Ready then
         AN_NeoPlayGif(target, key)
@@ -1625,25 +1594,6 @@ function AN_NeoProcessText(object)
     end
 end
 
-function AN_NeoApplySurface(object)
-    local state = AN_ENV.AN_NEO_THEME_STATE
-    if not state or not state.Enabled or not object or not object.Parent then return end
-    if object == MainFrame or object == state.BackgroundImage or object == state.Dimmer then return end
-    if not (object:IsA("Frame") or object:IsA("ScrollingFrame")) then return end
-    if object.BackgroundTransparency >= 1 then return end
-
-    local color = object.BackgroundColor3
-    if color.R <= 0.22 and color.G <= 0.22 and color.B <= 0.22 then
-        if state.OriginalTransparency[object] == nil then
-            state.OriginalTransparency[object] = object.BackgroundTransparency
-        end
-        local targetTransparency = (object == HeaderBar) and 0.24 or 0.48
-        if object.BackgroundTransparency < targetTransparency then
-            object.BackgroundTransparency = targetTransparency
-        end
-    end
-end
-
 function AN_NeoThemeAddDescendant(object)
     local state = AN_ENV.AN_NEO_THEME_STATE
     if not state or not object then return end
@@ -1659,7 +1609,6 @@ function AN_NeoThemeAddDescendant(object)
     end
 
     if state.Enabled then
-        AN_NeoApplySurface(object)
         if object:IsA("ImageLabel") or object:IsA("ImageButton") then
             if object.Name == "BrandNeoIcon" or object.Name == "CreditsLogo" or object.Name == "LoadingAN" or object.Name == "MinimizedPill" then
                 AN_NeoAttachGif(object, "icon")
@@ -1698,21 +1647,16 @@ function AN_ToggleNeoTheme()
     state.Enabled = not state.Enabled
 
     if state.Enabled then
-        state.BackgroundImage.Visible = true
-        state.Dimmer.Visible = true
         if state.BrandIcon then state.BrandIcon.Visible = true end
         BrandLogo.Position = UDim2.new(0, 52, 0, 0)
         BrandLogo.Size = UDim2.new(0, 120, 1, 0)
         BrandLogo.TextSize = 20
-        AN_NeoAttachGif(state.BackgroundImage, "background")
 
         for _, object in ipairs(ScreenGui:GetDescendants()) do
             AN_NeoThemeAddDescendant(object)
         end
         AN_NeoRefreshLogos()
     else
-        state.BackgroundImage.Visible = false
-        state.Dimmer.Visible = false
         if state.BrandIcon then state.BrandIcon.Visible = false end
         BrandLogo.Position = UDim2.new(0, 18, 0, 0)
         BrandLogo.Size = UDim2.new(0, 170, 1, 0)
@@ -1725,12 +1669,6 @@ function AN_ToggleNeoTheme()
             state.LastText[object] = nil
             if object and object.Parent and lastText ~= nil and object.Text == lastText then
                 object.Text = originalText
-            end
-        end
-        for object, originalTransparency in pairs(state.OriginalTransparency) do
-            state.OriginalTransparency[object] = nil
-            if object and object.Parent then
-                object.BackgroundTransparency = originalTransparency
             end
         end
         AN_NeoRefreshLogos()
