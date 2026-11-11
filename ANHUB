@@ -1,4 +1,6 @@
 local Plrs = game:GetService("Players")
+local TS = game:GetService("TweenService")
+
 local LP = Plrs.LocalPlayer
 local PG = LP:WaitForChild("PlayerGui")
 
@@ -9,10 +11,10 @@ SC.IgnoreGuiInset = true
 SC.Parent = PG
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(380, 190)
+Main.Size = UDim2.fromOffset(390, 215)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+Main.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
 Main.BorderSizePixel = 0
 Main.Parent = SC
 
@@ -21,28 +23,83 @@ Corner.CornerRadius = UDim.new(0, 10)
 Corner.Parent = Main
 
 local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(55, 55, 55)
-Stroke.Thickness = 1
+Stroke.Color = Color3.fromRGB(190, 20, 35)
+Stroke.Thickness = 1.5
 Stroke.Parent = Main
+
+local Top = Instance.new("Frame")
+Top.Size = UDim2.new(1, 0, 0, 4)
+Top.BackgroundColor3 = Color3.fromRGB(220, 25, 45)
+Top.BorderSizePixel = 0
+Top.Parent = Main
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 10)
+TopCorner.Parent = Top
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -30, 0, 35)
-Title.Position = UDim2.fromOffset(15, 18)
+Title.Position = UDim2.fromOffset(15, 19)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBold
 Title.Text = "SCRIPT HUB TEMPORARILY CLOSED"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 17
+Title.TextSize = 16
 Title.Parent = Main
 
+local Line = Instance.new("Frame")
+Line.Size = UDim2.new(1, -40, 0, 1)
+Line.Position = UDim2.fromOffset(20, 61)
+Line.BackgroundColor3 = Color3.fromRGB(65, 25, 30)
+Line.BorderSizePixel = 0
+Line.Parent = Main
+
 local Desc = Instance.new("TextLabel")
-Desc.Size = UDim2.new(1, -40, 0, 95)
-Desc.Position = UDim2.fromOffset(20, 65)
+Desc.Size = UDim2.new(1, -40, 0, 85)
+Desc.Position = UDim2.fromOffset(20, 72)
 Desc.BackgroundTransparency = 1
 Desc.Font = Enum.Font.Gotham
 Desc.Text = "Our script was recently deobfuscated, so we've temporarily closed the hub while we work on securing it.\n\nWe expect things to be back within a week. Thank you for your patience and support."
 Desc.TextColor3 = Color3.fromRGB(175, 175, 175)
-Desc.TextSize = 13
+Desc.TextSize = 12
 Desc.TextWrapped = true
 Desc.TextYAlignment = Enum.TextYAlignment.Center
 Desc.Parent = Main
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.new(1, -40, 0, 34)
+Close.Position = UDim2.new(0, 20, 1, -48)
+Close.BackgroundColor3 = Color3.fromRGB(160, 20, 35)
+Close.BorderSizePixel = 0
+Close.Font = Enum.Font.GothamBold
+Close.Text = "CLOSE"
+Close.TextColor3 = Color3.fromRGB(255, 255, 255)
+Close.TextSize = 12
+Close.AutoButtonColor = false
+Close.Parent = Main
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = Close
+
+Close.MouseEnter:Connect(function()
+    TS:Create(Close, TweenInfo.new(0.2), {
+        BackgroundColor3 = Color3.fromRGB(210, 25, 45)
+    }):Play()
+end)
+
+Close.MouseLeave:Connect(function()
+    TS:Create(Close, TweenInfo.new(0.2), {
+        BackgroundColor3 = Color3.fromRGB(160, 20, 35)
+    }):Play()
+end)
+
+Close.MouseButton1Click:Connect(function()
+    TS:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2.fromOffset(350, 0),
+        BackgroundTransparency = 1
+    }):Play()
+
+    task.wait(0.25)
+    SC:Destroy()
+end)
